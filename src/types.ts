@@ -276,6 +276,19 @@ export interface SchoolSettings {
   early_warning_settings: EarlyWarningSettings;
 }
 
+export interface PeriodicEvaluation {
+  evaluation_id: string;
+  student_id: string;
+  academic_year_id: string;
+  semester: 'Ganjil' | 'Genap';
+  period: string; // e.g. 'Tengah Semester', 'Akhir Semester', 'Bulanan'
+  compliance_score?: number; // 0-100 (Kepatuhan seragam & aturan)
+  responsibility_score?: number; // 0-100 (Tanggung jawab tugas & piket)
+  notes?: string;
+  evaluator: string; // Nama Wali Kelas
+  evaluated_at: string;
+}
+
 export interface AppDatabase {
   version: string;
   last_backup: string;
@@ -294,6 +307,7 @@ export interface AppDatabase {
   achievements: AchievementRecord[];
   potentials: StudentPotential[];
   parent_communications: ParentCommunication[];
+  evaluations?: PeriodicEvaluation[];
 }
 
 export interface StudentFullData {
@@ -320,12 +334,16 @@ export interface StudentFullData {
   discipline_score: {
     score: number;
     category: 'Sangat Baik' | 'Baik' | 'Cukup' | 'Perlu Pembinaan' | 'Perhatian Khusus';
+    is_complete: boolean;
+    status_label: string;
     factors: {
       attendance_score: number;
       punctuality_score: number;
       violation_score: number;
       compliance_score: number;
       responsibility_score: number;
+      has_compliance_input: boolean;
+      has_responsibility_input: boolean;
     };
   };
   warning_level: WarningLevel;

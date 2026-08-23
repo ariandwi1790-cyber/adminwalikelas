@@ -1,0 +1,327 @@
+{
+  "entities": {
+    "Student": {
+      "title": "Student",
+      "description": "Indeks data pokok siswa wali kelas dengan Student ID permanen",
+      "type": "object",
+      "properties": {
+        "student_id": { "type": "string", "maxLength": 64, "pattern": "^STU-[0-9]{5}$" },
+        "nis": { "type": "string", "maxLength": 32 },
+        "nisn": { "type": "string", "maxLength": 32 },
+        "nik": { "type": "string", "maxLength": 32 },
+        "full_name": { "type": "string", "maxLength": 200 },
+        "gender": { "type": "string", "enum": ["L", "P"] },
+        "birth_place": { "type": "string", "maxLength": 100 },
+        "birth_date": { "type": "string", "maxLength": 32 },
+        "religion": { "type": "string", "maxLength": 50 },
+        "phone": { "type": "string", "maxLength": 50 },
+        "previous_school": { "type": "string", "maxLength": 150 },
+        "status": { "type": "string", "enum": ["Active", "Graduated", "Transferred", "DroppedOut"] },
+        "created_at": { "type": "string", "maxLength": 64 },
+        "updated_at": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["student_id", "full_name", "gender", "status"]
+    },
+    "Parent": {
+      "title": "Parent",
+      "description": "Data orang tua atau wali murid terkait siswa",
+      "type": "object",
+      "properties": {
+        "parent_id": { "type": "string", "maxLength": 64 },
+        "student_id": { "type": "string", "maxLength": 64 },
+        "father_name": { "type": "string", "maxLength": 150 },
+        "father_job": { "type": "string", "maxLength": 150 },
+        "mother_name": { "type": "string", "maxLength": 150 },
+        "mother_job": { "type": "string", "maxLength": 150 },
+        "guardian_name": { "type": "string", "maxLength": 150 },
+        "guardian_job": { "type": "string", "maxLength": 150 },
+        "parent_phone": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["parent_id", "student_id"]
+    },
+    "Address": {
+      "title": "Address",
+      "description": "Data alamat dan domisili siswa",
+      "type": "object",
+      "properties": {
+        "address_id": { "type": "string", "maxLength": 64 },
+        "student_id": { "type": "string", "maxLength": 64 },
+        "rt": { "type": "string", "maxLength": 10 },
+        "rw": { "type": "string", "maxLength": 10 },
+        "dusun": { "type": "string", "maxLength": 100 },
+        "desa": { "type": "string", "maxLength": 100 },
+        "kecamatan": { "type": "string", "maxLength": 100 },
+        "kabupaten": { "type": "string", "maxLength": 100 },
+        "full_address": { "type": "string", "maxLength": 300 }
+      },
+      "required": ["address_id", "student_id"]
+    },
+    "AcademicYear": {
+      "title": "AcademicYear",
+      "description": "Tahun ajaran dan semester aktif",
+      "type": "object",
+      "properties": {
+        "academic_year_id": { "type": "string", "maxLength": 64 },
+        "year_name": { "type": "string", "maxLength": 50 },
+        "semester": { "type": "string", "enum": ["Ganjil", "Genap"] },
+        "status": { "type": "string", "enum": ["Active", "Inactive"] }
+      },
+      "required": ["academic_year_id", "year_name", "semester", "status"]
+    },
+    "SchoolClass": {
+      "title": "SchoolClass",
+      "description": "Data rombongan belajar / kelas",
+      "type": "object",
+      "properties": {
+        "class_id": { "type": "string", "maxLength": 64 },
+        "class_name": { "type": "string", "maxLength": 50 },
+        "grade": { "type": "string", "maxLength": 10 },
+        "major": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["class_id", "class_name", "grade", "major"]
+    },
+    "StudentClassHistory": {
+      "title": "StudentClassHistory",
+      "description": "Riwayat penempatan dan promosi kelas siswa",
+      "type": "object",
+      "properties": {
+        "history_id": { "type": "string", "maxLength": 64 },
+        "student_id": { "type": "string", "maxLength": 64 },
+        "class_id": { "type": "string", "maxLength": 64 },
+        "academic_year_id": { "type": "string", "maxLength": 64 },
+        "start_date": { "type": "string", "maxLength": 32 },
+        "end_date": { "type": "string", "maxLength": 32 },
+        "status": { "type": "string", "enum": ["Active", "Promoted", "Graduated", "Transferred"] }
+      },
+      "required": ["history_id", "student_id", "class_id", "academic_year_id", "status"]
+    },
+    "AttendanceRecord": {
+      "title": "AttendanceRecord",
+      "description": "Rekapitulasi catatan presensi siswa harian",
+      "type": "object",
+      "properties": {
+        "attendance_id": { "type": "string", "maxLength": 64 },
+        "student_id": { "type": "string", "maxLength": 64 },
+        "class_id": { "type": "string", "maxLength": 64 },
+        "academic_year_id": { "type": "string", "maxLength": 64 },
+        "date": { "type": "string", "maxLength": 32 },
+        "status": { "type": "string", "enum": ["Hadir", "Sakit", "Izin", "Alpa", "Terlambat"] },
+        "note": { "type": "string", "maxLength": 255 },
+        "recorded_at": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["attendance_id", "student_id", "class_id", "academic_year_id", "date", "status"]
+    },
+    "ViolationRecord": {
+      "title": "ViolationRecord",
+      "description": "Catatan pelanggaran tata tertib dan poin pelanggaran",
+      "type": "object",
+      "properties": {
+        "violation_id": { "type": "string", "maxLength": 64 },
+        "student_id": { "type": "string", "maxLength": 64 },
+        "academic_year_id": { "type": "string", "maxLength": 64 },
+        "date": { "type": "string", "maxLength": 32 },
+        "violation_type": { "type": "string", "maxLength": 100 },
+        "level": { "type": "string", "enum": ["Ringan", "Sedang", "Berat"] },
+        "penalty_points": { "type": "number" },
+        "chronology": { "type": "string", "maxLength": 1000 },
+        "action_taken": { "type": "string", "maxLength": 500 },
+        "reporter": { "type": "string", "maxLength": 100 },
+        "status": { "type": "string", "enum": ["Aktif", "Dalam Pembinaan", "Selesai"] },
+        "created_at": { "type": "string", "maxLength": 64 },
+        "updated_at": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["violation_id", "student_id", "academic_year_id", "date", "violation_type", "level", "penalty_points", "status"]
+    },
+    "GuidanceRecord": {
+      "title": "GuidanceRecord",
+      "description": "Catatan pembinaan dan konseling bertahap",
+      "type": "object",
+      "properties": {
+        "guidance_id": { "type": "string", "maxLength": 64 },
+        "student_id": { "type": "string", "maxLength": 64 },
+        "violation_id": { "type": "string", "maxLength": 64 },
+        "academic_year_id": { "type": "string", "maxLength": 64 },
+        "date": { "type": "string", "maxLength": 32 },
+        "stage": { "type": "string", "enum": ["Tahap 1", "Tahap 2", "Tahap 3", "Surat Peringatan (SP)"] },
+        "counselor_name": { "type": "string", "maxLength": 100 },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "agreement": { "type": "string", "maxLength": 1000 },
+        "follow_up": { "type": "string", "maxLength": 500 },
+        "status": { "type": "string", "enum": ["Dijadwalkan", "Selesai", "Perlu Tindak Lanjut"] },
+        "created_at": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["guidance_id", "student_id", "academic_year_id", "date", "stage", "status"]
+    },
+    "HomeVisitRecord": {
+      "title": "HomeVisitRecord",
+      "description": "Laporan kunjungan rumah (Home Visit) wali kelas & BK",
+      "type": "object",
+      "properties": {
+        "visit_id": { "type": "string", "maxLength": 64 },
+        "student_id": { "type": "string", "maxLength": 64 },
+        "academic_year_id": { "type": "string", "maxLength": 64 },
+        "date": { "type": "string", "maxLength": 32 },
+        "reason": { "type": "string", "maxLength": 255 },
+        "address": { "type": "string", "maxLength": 300 },
+        "met_parties": { "type": "string", "maxLength": 200 },
+        "condition": { "type": "string", "maxLength": 1000 },
+        "problem": { "type": "string", "maxLength": 1000 },
+        "result": { "type": "string", "maxLength": 1000 },
+        "agreement": { "type": "string", "maxLength": 1000 },
+        "follow_up": { "type": "string", "maxLength": 500 },
+        "created_at": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["visit_id", "student_id", "academic_year_id", "date", "reason"]
+    },
+    "StudentNote": {
+      "title": "StudentNote",
+      "description": "Jurnal catatan berkala wali kelas terhadap siswa",
+      "type": "object",
+      "properties": {
+        "note_id": { "type": "string", "maxLength": 64 },
+        "student_id": { "type": "string", "maxLength": 64 },
+        "academic_year_id": { "type": "string", "maxLength": 64 },
+        "date": { "type": "string", "maxLength": 32 },
+        "category": { "type": "string", "enum": ["Akademik", "Sikap & Karakter", "Sosial", "Insiden Khusus", "Lainnya"] },
+        "title": { "type": "string", "maxLength": 200 },
+        "content": { "type": "string", "maxLength": 2000 },
+        "author": { "type": "string", "maxLength": 100 },
+        "created_at": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["note_id", "student_id", "academic_year_id", "date", "category", "title", "content"]
+    },
+    "AchievementRecord": {
+      "title": "AchievementRecord",
+      "description": "Rekam jejak prestasi akademik dan non-akademik siswa",
+      "type": "object",
+      "properties": {
+        "achievement_id": { "type": "string", "maxLength": 64 },
+        "student_id": { "type": "string", "maxLength": 64 },
+        "academic_year_id": { "type": "string", "maxLength": 64 },
+        "date": { "type": "string", "maxLength": 32 },
+        "title": { "type": "string", "maxLength": 200 },
+        "category": { "type": "string", "enum": ["Akademik", "Olahraga", "Seni & Budaya", "Keagamaan", "Teknologi & Vokasi", "Lainnya"] },
+        "level": { "type": "string", "enum": ["Sekolah", "Kecamatan", "Kabupaten/Kota", "Provinsi", "Nasional", "Internasional"] },
+        "rank": { "type": "string", "maxLength": 50 },
+        "organizer": { "type": "string", "maxLength": 150 },
+        "certificate_no": { "type": "string", "maxLength": 100 },
+        "created_at": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["achievement_id", "student_id", "academic_year_id", "date", "title", "category", "level", "rank"]
+    },
+    "StudentPotential": {
+      "title": "StudentPotential",
+      "description": "Pemetaan potensi, minat, dan bakat siswa",
+      "type": "object",
+      "properties": {
+        "potential_id": { "type": "string", "maxLength": 64 },
+        "student_id": { "type": "string", "maxLength": 64 },
+        "interests": { "type": "string", "maxLength": 500 },
+        "talents": { "type": "string", "maxLength": 500 },
+        "skills": { "type": "string", "maxLength": 500 },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "updated_at": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["potential_id", "student_id"]
+    },
+    "ParentCommunication": {
+      "title": "ParentCommunication",
+      "description": "Log komunikasi dan koordinasi wali kelas dengan orang tua murid",
+      "type": "object",
+      "properties": {
+        "comm_id": { "type": "string", "maxLength": 64 },
+        "student_id": { "type": "string", "maxLength": 64 },
+        "academic_year_id": { "type": "string", "maxLength": 64 },
+        "date": { "type": "string", "maxLength": 32 },
+        "parent_name": { "type": "string", "maxLength": 150 },
+        "media": { "type": "string", "enum": ["WhatsApp", "Telepon", "Tatap Muka", "Surat Resmi", "Lainnya"] },
+        "topic": { "type": "string", "maxLength": 255 },
+        "result": { "type": "string", "maxLength": 1000 },
+        "follow_up": { "type": "string", "maxLength": 500 },
+        "created_at": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["comm_id", "student_id", "academic_year_id", "date", "parent_name", "media", "topic"]
+    },
+    "SchoolSettings": {
+      "title": "SchoolSettings",
+      "description": "Konfigurasi instansi, profil wali kelas, bobot disiplin, dan batas peringatan",
+      "type": "object",
+      "properties": {
+        "school_name": { "type": "string", "maxLength": 150 },
+        "npsn": { "type": "string", "maxLength": 32 },
+        "school_address": { "type": "string", "maxLength": 300 },
+        "principal_name": { "type": "string", "maxLength": 150 },
+        "principal_nip": { "type": "string", "maxLength": 50 },
+        "homeroom_teacher_name": { "type": "string", "maxLength": 150 },
+        "homeroom_teacher_nip": { "type": "string", "maxLength": 50 },
+        "current_academic_year_id": { "type": "string", "maxLength": 64 },
+        "current_class_id": { "type": "string", "maxLength": 64 },
+        "discipline_settings": { "type": "object" },
+        "early_warning_settings": { "type": "object" }
+      },
+      "required": ["school_name", "principal_name", "homeroom_teacher_name"]
+    }
+  },
+  "firestore": {
+    "/students/{studentId}": {
+      "schema": "Student",
+      "description": "Data primer siswa dengan student_id unik permanen"
+    },
+    "/parents/{parentId}": {
+      "schema": "Parent",
+      "description": "Data orang tua terhubung ke student_id"
+    },
+    "/addresses/{addressId}": {
+      "schema": "Address",
+      "description": "Data alamat domisili terhubung ke student_id"
+    },
+    "/academic_years/{ayId}": {
+      "schema": "AcademicYear",
+      "description": "Daftar tahun ajaran sekolah"
+    },
+    "/classes/{classId}": {
+      "schema": "SchoolClass",
+      "description": "Daftar rombel kelas"
+    },
+    "/student_class_history/{historyId}": {
+      "schema": "StudentClassHistory",
+      "description": "Histori penempatan kelas dan mutasi siswa per tahun ajaran"
+    },
+    "/attendance/{attendanceId}": {
+      "schema": "AttendanceRecord",
+      "description": "Presensi harian siswa"
+    },
+    "/violations/{violationId}": {
+      "schema": "ViolationRecord",
+      "description": "Catatan pelanggaran kedisiplinan siswa"
+    },
+    "/guidance/{guidanceId}": {
+      "schema": "GuidanceRecord",
+      "description": "Catatan pembinaan dan konseling tindak lanjut"
+    },
+    "/home_visits/{visitId}": {
+      "schema": "HomeVisitRecord",
+      "description": "Laporan kunjungan rumah siswa"
+    },
+    "/student_notes/{noteId}": {
+      "schema": "StudentNote",
+      "description": "Jurnal catatan wali kelas"
+    },
+    "/achievements/{achievementId}": {
+      "schema": "AchievementRecord",
+      "description": "Rekam prestasi akademik dan non-akademik siswa"
+    },
+    "/potentials/{potentialId}": {
+      "schema": "StudentPotential",
+      "description": "Minat dan potensi siswa"
+    },
+    "/parent_communications/{commId}": {
+      "schema": "ParentCommunication",
+      "description": "Log komunikasi dengan orang tua siswa"
+    },
+    "/school_settings/{settingsId}": {
+      "schema": "SchoolSettings",
+      "description": "Pengaturan sekolah, kop laporan, dan bobot disiplin"
+    }
+  }
+}

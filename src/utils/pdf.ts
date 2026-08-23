@@ -261,9 +261,9 @@ export function generateStudentReportPDF(
 
 export function generateClassRecapPDF(
   students: StudentFullData[],
-  settings: SchoolSettings,
   className: string,
-  academicYearName: string
+  academicYearName: string,
+  settings: SchoolSettings
 ): void {
   const doc = new jsPDF({
     orientation: 'landscape',

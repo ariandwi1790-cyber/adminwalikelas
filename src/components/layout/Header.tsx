@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useDatabase } from '../../context/DatabaseContext';
 import { 
   School, 
@@ -7,7 +7,14 @@ import {
   Download, 
   Upload, 
   Menu,
-  Sparkles
+  Cloud,
+  CloudOff,
+  RefreshCw,
+  LogIn,
+  LogOut,
+  User as UserIcon,
+  CheckCircle2,
+  Database
 } from 'lucide-react';
 import { exportDatabaseBackup } from '../../db/storage';
 
@@ -29,8 +36,22 @@ export const Header: React.FC<HeaderProps> = ({
     activeAcademicYear, 
     activeClass, 
     setActiveAcademicYearId, 
-    setActiveClassId 
+    setActiveClassId,
+    currentUser,
+    isAuthenticated,
+    isFirestoreConnected,
+    isSyncing,
+    isOffline,
+    lastSyncTime,
+    loginGoogleUser,
+    logoutUser,
+    localDataAvailableForMigration,
+    localDataCount,
+    migrateLocalDataToFirestore
   } = useDatabase();
+
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [isMigrating, setIsMigrating] = useState(false);
 
   const handleQuickBackup = () => {
     const jsonStr = exportDatabaseBackup();
@@ -41,6 +62,14 @@ export const Header: React.FC<HeaderProps> = ({
     a.download = `Backup_WaliKelas_${db.school_settings.school_name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.json`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleMigrate = async () => {
+    if (window.confirm(`Unggah ${localDataCount} data siswa lokal ke Cloud Firestore sekarang?`)) {
+      setIsMigrating(true);
+      await migrateLocalDataToFirestore();
+      setIsMigrating(false);
+    }
   };
 
   return (
@@ -79,8 +108,51 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* Right: Context Switchers & Actions */}
-          <div className="flex items-center space-x-1.5 sm:space-x-3 flex-shrink-0">
+          {/* Right: Cloud Sync Status, Context Switchers & User Actions */}
+          <div className="flex items-center space-x-1.5 sm:space-x-2.5 flex-shrink-0">
+            {/* Cloud Firestore Status Pill */}
+            <div 
+              title={isOffline ? 'Mode Offline (Perubahan tersimpan lokal)' : isSyncing ? 'Menyinkronkan ke Firestore...' : `Tersambung ke Cloud Firestore ${lastSyncTime ? `(Terakhir: ${lastSyncTime})` : ''}`}
+              className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold ${
+                isOffline 
+                  ? 'bg-amber-50 border-amber-200 text-amber-800' 
+                  : isSyncing 
+                  ? 'bg-blue-50 border-blue-200 text-blue-800' 
+                  : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+              }`}
+            >
+              {isOffline ? (
+                <>
+                  <CloudOff className="w-3.5 h-3.5 text-amber-600" />
+                  <span className="text-[11px] hidden md:inline">Offline</span>
+                </>
+              ) : isSyncing ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 text-blue-600 animate-spin" />
+                  <span className="text-[11px] hidden md:inline">Syncing...</span>
+                </>
+              ) : (
+                <>
+                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <Cloud className="w-3.5 h-3.5 text-emerald-600" />
+                  <span className="text-[11px] hidden md:inline">Firestore Sync</span>
+                </>
+              )}
+            </div>
+
+            {/* Local Migration Banner if available */}
+            {localDataAvailableForMigration && (
+              <button
+                id="btn-header-migrate"
+                onClick={handleMigrate}
+                disabled={isMigrating}
+                className="hidden md:flex items-center gap-1 px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg transition shadow-xs cursor-pointer min-h-[36px]"
+              >
+                <Database className="w-3.5 h-3.5" />
+                <span>{isMigrating ? 'Memigrasikan...' : 'Migrasi ke Cloud'}</span>
+              </button>
+            )}
+
             {/* Academic Year Switcher Chip */}
             <div className="flex items-center bg-zinc-100 border border-zinc-200/80 rounded-lg px-2 sm:px-2.5 py-1 text-xs text-zinc-700 max-w-[130px] sm:max-w-none">
               <Calendar className="w-3.5 h-3.5 mr-1 text-blue-600 flex-shrink-0 hidden xs:block" />
@@ -139,6 +211,62 @@ export const Header: React.FC<HeaderProps> = ({
               <Download className="w-3.5 h-3.5 text-blue-600" />
               <span className="hidden md:inline font-bold">Backup</span>
             </button>
+
+            {/* Google Auth Avatar / Login */}
+            <div className="relative">
+              {isAuthenticated && currentUser ? (
+                <button
+                  id="btn-header-user-profile"
+                  onClick={() => setShowUserDropdown(prev => !prev)}
+                  className="flex items-center gap-1.5 p-1 rounded-full hover:ring-2 hover:ring-blue-400 transition cursor-pointer"
+                  title={`Akun: ${currentUser.displayName || currentUser.email}`}
+                >
+                  {currentUser.photoURL ? (
+                    <img 
+                      src={currentUser.photoURL} 
+                      alt="User" 
+                      className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-zinc-300 object-cover" 
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center">
+                      {(currentUser.displayName || currentUser.email || 'U')[0].toUpperCase()}
+                    </div>
+                  )}
+                </button>
+              ) : (
+                <button
+                  id="btn-header-google-login"
+                  onClick={loginGoogleUser}
+                  className="flex items-center gap-1 px-2.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold rounded-lg shadow-xs transition cursor-pointer min-h-[36px]"
+                >
+                  <LogIn className="w-3.5 h-3.5 text-blue-400" />
+                  <span className="hidden sm:inline">Login Google</span>
+                </button>
+              )}
+
+              {/* User Dropdown */}
+              {showUserDropdown && isAuthenticated && currentUser && (
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border border-zinc-200 py-2 z-50 text-xs animate-in fade-in zoom-in-95 duration-150">
+                  <div className="px-3 py-2 border-b border-zinc-100">
+                    <p className="font-bold text-zinc-900 truncate">{currentUser.displayName || 'Pengguna'}</p>
+                    <p className="text-zinc-500 truncate text-[11px]">{currentUser.email}</p>
+                  </div>
+                  <div className="p-1">
+                    <button
+                      onClick={() => {
+                        logoutUser();
+                        setShowUserDropdown(false);
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer text-left"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span>Keluar (Logout)</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

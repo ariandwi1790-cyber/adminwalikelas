@@ -141,12 +141,17 @@ export function getStudentFullData(
     c => c.student_id === studentId && (!ayId || c.academic_year_id === ayId)
   );
 
+  const studentEvaluation = db.evaluations?.find(
+    e => e.student_id === studentId && (!ayId || e.academic_year_id === ayId)
+  );
+
   // Calculations
   const attendance_summary = calculateAttendanceMetrics(studentAttendance);
   const discipline_score = calculateDisciplineIndex(
     studentAttendance,
     studentViolations,
-    db.school_settings.discipline_settings
+    db.school_settings.discipline_settings,
+    studentEvaluation
   );
   const early_warning = evaluateEarlyWarning(
     studentAttendance,

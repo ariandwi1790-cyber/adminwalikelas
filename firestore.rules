@@ -1,0 +1,142 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
+    }
+
+    // Students Collection
+    match /students/{studentId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(studentId);
+      allow delete: if isSignedIn() && isValidId(studentId);
+    }
+
+    // Parents Collection
+    match /parents/{parentId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(parentId);
+      allow delete: if isSignedIn() && isValidId(parentId);
+    }
+
+    // Addresses Collection
+    match /addresses/{addressId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(addressId);
+      allow delete: if isSignedIn() && isValidId(addressId);
+    }
+
+    // Academic Years Collection
+    match /academic_years/{ayId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(ayId);
+      allow delete: if isSignedIn() && isValidId(ayId);
+    }
+
+    // Classes Collection
+    match /classes/{classId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(classId);
+      allow delete: if isSignedIn() && isValidId(classId);
+    }
+
+    // Student Class History Collection
+    match /student_class_history/{historyId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(historyId);
+      allow delete: if isSignedIn() && isValidId(historyId);
+    }
+
+    // Attendance Collection
+    match /attendance/{attendanceId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(attendanceId);
+      allow delete: if isSignedIn() && isValidId(attendanceId);
+    }
+
+    // Violations Collection
+    match /violations/{violationId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(violationId);
+      allow delete: if isSignedIn() && isValidId(violationId);
+    }
+
+    // Guidance Collection
+    match /guidance/{guidanceId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(guidanceId);
+      allow delete: if isSignedIn() && isValidId(guidanceId);
+    }
+
+    // Home Visits Collection
+    match /home_visits/{visitId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(visitId);
+      allow delete: if isSignedIn() && isValidId(visitId);
+    }
+
+    // Student Notes Collection
+    match /student_notes/{noteId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(noteId);
+      allow delete: if isSignedIn() && isValidId(noteId);
+    }
+
+    // Achievements Collection
+    match /achievements/{achievementId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(achievementId);
+      allow delete: if isSignedIn() && isValidId(achievementId);
+    }
+
+    // Student Potentials Collection
+    match /potentials/{potentialId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(potentialId);
+      allow delete: if isSignedIn() && isValidId(potentialId);
+    }
+
+    // Parent Communications Collection
+    match /parent_communications/{commId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(commId);
+      allow delete: if isSignedIn() && isValidId(commId);
+    }
+
+    // School Settings Collection
+    match /school_settings/{settingsId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(settingsId);
+      allow delete: if isSignedIn() && isValidId(settingsId);
+    }
+
+    // Evaluations & Periodic Assessments Collection
+    match /evaluations/{evalId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(evalId);
+      allow delete: if isSignedIn() && isValidId(evalId);
+    }
+
+    // Atomic Counters Collection (e.g. counters/students)
+    match /counters/{counterId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(counterId);
+      allow delete: if isSignedIn() && isValidId(counterId);
+    }
+
+    // Test Connection Collection
+    match /test/{testId} {
+      allow read, write: if isSignedIn();
+    }
+  }
+}

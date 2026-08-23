@@ -4,6 +4,7 @@ import {
   ViolationRecord, 
   DisciplineSettings, 
   EarlyWarningSettings, 
+  PeriodicEvaluation,
   WarningLevel 
 } from '../types';
 
@@ -18,6 +19,7 @@ export function calculateAttendanceMetrics(records: AttendanceRecord[]) {
       alpa: 0,
       terlambat: 0,
       attendance_rate: 100,
+      physical_presence_count: 0,
     };
   }
 
@@ -34,13 +36,13 @@ export function calculateAttendanceMetrics(records: AttendanceRecord[]) {
     else if (r.status === 'Alpa') alpa++;
     else if (r.status === 'Terlambat') {
       terlambat++;
-      hadir++; // Terlambat tetap dihitung hadir secara fisik tetapi kena penalti ketepatan waktu
     }
   }
 
-  // Attendance rate (Hadir / Total) * 100
-  // Note: Sakit & Izin are with permission, but pure presence rate
-  const rate = total > 0 ? Math.round(((hadir) / total) * 100) : 100;
+  // Formula: (Hadir + Terlambat) / Total Hari Efektif * 100
+  // Terlambat tetap hadir fisik, Sakit & Izin bukan kehadiran fisik (meski berizin)
+  const physicalPresence = hadir + terlambat;
+  const rate = total > 0 ? Math.round((physicalPresence / total) * 100) : 100;
 
   return {
     total,
@@ -49,6 +51,7 @@ export function calculateAttendanceMetrics(records: AttendanceRecord[]) {
     izin,
     alpa,
     terlambat,
+    physical_presence_count: physicalPresence,
     attendance_rate: Math.min(100, Math.max(0, rate)),
   };
 }
@@ -56,67 +59,82 @@ export function calculateAttendanceMetrics(records: AttendanceRecord[]) {
 export function calculateDisciplineIndex(
   attendanceRecords: AttendanceRecord[],
   violations: ViolationRecord[],
-  settings: DisciplineSettings
+  settings: DisciplineSettings,
+  evaluation?: PeriodicEvaluation
 ) {
   const metrics = calculateAttendanceMetrics(attendanceRecords);
 
-  // 1. Attendance Factor (0-100)
-  // Kehadiran base score
+  // 1. Attendance Factor (30% weight) - Range 0 to 100
   let attendanceScore = 100;
   if (metrics.total > 0) {
-    // Pengurangan berat untuk alpa (tiap 1 alpa -15 poin dari skor kehadiran)
+    const basicRate = (metrics.physical_presence_count / metrics.total) * 100;
+    // Alpa gives strict penalty of 15 points per occurrence
     const alpaPenalty = metrics.alpa * 15;
-    const basicRate = (metrics.hadir / metrics.total) * 100;
-    attendanceScore = Math.max(0, basicRate - alpaPenalty);
+    attendanceScore = Math.max(0, Math.min(100, basicRate - alpaPenalty));
   }
 
-  // 2. Punctuality Factor (0-100)
+  // 2. Punctuality Factor (20% weight) - Range 0 to 100
+  // Each late arrival deducts 10 points
   let punctualityScore = 100;
   if (metrics.total > 0) {
-    // Tiap terlambat memotong 10 poin dari faktor ketepatan waktu
     punctualityScore = Math.max(0, 100 - (metrics.terlambat * 10));
   }
 
-  // 3. Violations Factor (0-100)
-  // Tiap poin pelanggaran mengurangi skor
+  // 3. Violation-Free Factor (25% weight) - Range 0 to 100
   let totalPenaltyPoints = 0;
-  let activeBeratCount = 0;
-
   for (const v of violations) {
-    totalPenaltyPoints += v.penalty_points || (v.level === 'Berat' ? 30 : v.level === 'Sedang' ? 15 : 5);
-    if (v.level === 'Berat' && v.status !== 'Selesai') {
-      activeBeratCount++;
-    }
+    const points = typeof v.penalty_points === 'number' && v.penalty_points > 0
+      ? v.penalty_points
+      : (v.level === 'Berat' ? 30 : v.level === 'Sedang' ? 15 : 5);
+    totalPenaltyPoints += points;
   }
+  const violationScore = Math.max(0, 100 - totalPenaltyPoints);
 
-  let violationScore = Math.max(0, 100 - totalPenaltyPoints);
+  // 4. Compliance Factor (15% weight) - Range 0 to 100
+  // Sourced from periodic homeroom teacher evaluation; fallback to 0 if not assessed yet
+  const hasComplianceInput = typeof evaluation?.compliance_score === 'number' && !isNaN(evaluation.compliance_score);
+  const complianceScore = hasComplianceInput ? Math.min(100, Math.max(0, evaluation!.compliance_score!)) : 0;
 
-  // 4. Compliance Factor (Kepatuhan seragam, kelengkapan, dsb) (0-100)
-  // Dihitung berdasarkan pelanggaran ringan & sedang yang tercatat
-  const minorViolations = violations.filter(v => v.level === 'Ringan').length;
-  const complianceScore = Math.max(0, 100 - (minorViolations * 8));
+  // 5. Responsibility Factor (10% weight) - Range 0 to 100
+  // Sourced from periodic homeroom teacher evaluation; fallback to 0 if not assessed yet
+  const hasResponsibilityInput = typeof evaluation?.responsibility_score === 'number' && !isNaN(evaluation.responsibility_score);
+  const responsibilityScore = hasResponsibilityInput ? Math.min(100, Math.max(0, evaluation!.responsibility_score!)) : 0;
 
-  // 5. Responsibility Factor (Tanggung jawab tugas, sikap) (0-100)
-  const medViolations = violations.filter(v => v.level === 'Sedang').length;
-  const responsibilityScore = Math.max(0, 100 - (medViolations * 12) - (activeBeratCount * 25));
+  const isComplete = hasComplianceInput && hasResponsibilityInput;
+  const statusLabel = isComplete ? 'Penilaian Lengkap' : 'Penilaian belum lengkap';
 
-  // Total weighted calculation
-  const totalWeight = 
-    (settings.weight_attendance || 30) +
-    (settings.weight_punctuality || 20) +
-    (settings.weight_violations || 25) +
-    (settings.weight_compliance || 15) +
-    (settings.weight_responsibility || 10);
+  const wAttendance = settings.weight_attendance ?? 30;
+  const wPunctuality = settings.weight_punctuality ?? 20;
+  const wViolations = settings.weight_violations ?? 25;
+  const wCompliance = settings.weight_compliance ?? 15;
+  const wResponsibility = settings.weight_responsibility ?? 10;
 
-  const finalScore = Math.round(
-    (
-      (attendanceScore * (settings.weight_attendance || 30)) +
-      (punctualityScore * (settings.weight_punctuality || 20)) +
-      (violationScore * (settings.weight_violations || 25)) +
-      (complianceScore * (settings.weight_compliance || 15)) +
-      (responsibilityScore * (settings.weight_responsibility || 10))
-    ) / (totalWeight || 100)
-  );
+  const totalWeight = wAttendance + wPunctuality + wViolations + wCompliance + wResponsibility;
+
+  // If complete, calculate exact 5-factor weighted score
+  // If incomplete, calculate based on assessed factors without fabricating data
+  let finalScore = 0;
+  if (isComplete) {
+    finalScore = Math.round(
+      (
+        (attendanceScore * wAttendance) +
+        (punctualityScore * wPunctuality) +
+        (violationScore * wViolations) +
+        (complianceScore * wCompliance) +
+        (responsibilityScore * wResponsibility)
+      ) / (totalWeight || 100)
+    );
+  } else {
+    // Calculate objective baseline (Kehadiran 30% + Ketepatan 20% + Bebas Pelanggaran 25% = 75% total baseline)
+    const baselineWeight = wAttendance + wPunctuality + wViolations;
+    finalScore = Math.round(
+      (
+        (attendanceScore * wAttendance) +
+        (punctualityScore * wPunctuality) +
+        (violationScore * wViolations)
+      ) / (baselineWeight || 75)
+    );
+  }
 
   const boundedScore = Math.min(100, Math.max(0, finalScore));
 
@@ -130,12 +148,16 @@ export function calculateDisciplineIndex(
   return {
     score: boundedScore,
     category,
+    is_complete: isComplete,
+    status_label: statusLabel,
     factors: {
       attendance_score: Math.round(attendanceScore),
       punctuality_score: Math.round(punctualityScore),
       violation_score: Math.round(violationScore),
       compliance_score: Math.round(complianceScore),
       responsibility_score: Math.round(responsibilityScore),
+      has_compliance_input: hasComplianceInput,
+      has_responsibility_input: hasResponsibilityInput,
     }
   };
 }
@@ -151,18 +173,24 @@ export function evaluateEarlyWarning(
   const activeViolations = violations.filter(v => v.status !== 'Selesai');
   const activeBerat = activeViolations.filter(v => v.level === 'Berat');
 
+  const highAttThresh = settings.high_priority_attendance_threshold ?? 80;
+  const highAlpaThresh = settings.high_priority_alpa_threshold ?? 3;
+  const warnAttThresh = settings.warning_attendance_threshold ?? 90;
+  const warnLateThresh = settings.warning_late_threshold ?? 3;
+  const warnViolThresh = settings.warning_violation_threshold ?? 2;
+
   // Rule 1: High Priority (Prioritas Tinggi)
   // Kehadiran < threshold (80%) ATAU Alpa >= threshold (3) ATAU Kasus berat aktif
   let isHighPriority = false;
 
-  if (metrics.total >= 5 && metrics.attendance_rate < settings.high_priority_attendance_threshold) {
+  if (metrics.total >= 3 && metrics.attendance_rate < highAttThresh) {
     isHighPriority = true;
-    reasons.push(`Tingkat kehadiran sangat rendah (${metrics.attendance_rate}% < ${settings.high_priority_attendance_threshold}%)`);
+    reasons.push(`Tingkat kehadiran sangat rendah (${metrics.attendance_rate}% < ${highAttThresh}%)`);
   }
 
-  if (metrics.alpa >= settings.high_priority_alpa_threshold) {
+  if (metrics.alpa >= highAlpaThresh) {
     isHighPriority = true;
-    reasons.push(`Akumulasi Alpa mencapai ${metrics.alpa} hari (Batas: ${settings.high_priority_alpa_threshold})`);
+    reasons.push(`Akumulasi Alpa mencapai ${metrics.alpa} hari (Batas aman: < ${highAlpaThresh})`);
   }
 
   if (activeBerat.length > 0) {
@@ -175,20 +203,20 @@ export function evaluateEarlyWarning(
   }
 
   // Rule 2: Warning (Perlu Perhatian)
-  // Kehadiran 80-89% ATAU Terlambat >= 3 ATAU Pelanggaran >= 2
+  // Kehadiran di bawah standar (80-89%) ATAU Terlambat >= 3 ATAU Pelanggaran Aktif >= 2
   let isWarning = false;
 
-  if (metrics.total >= 5 && metrics.attendance_rate < settings.warning_attendance_threshold) {
+  if (metrics.total >= 3 && metrics.attendance_rate < warnAttThresh) {
     isWarning = true;
-    reasons.push(`Kehadiran di bawah standar (${metrics.attendance_rate}% < ${settings.warning_attendance_threshold}%)`);
+    reasons.push(`Kehadiran di bawah standar (${metrics.attendance_rate}% < ${warnAttThresh}%)`);
   }
 
-  if (metrics.terlambat >= settings.warning_late_threshold) {
+  if (metrics.terlambat >= warnLateThresh) {
     isWarning = true;
     reasons.push(`Sering terlambat (${metrics.terlambat} kali terlambat)`);
   }
 
-  if (activeViolations.length >= settings.warning_violation_threshold) {
+  if (activeViolations.length >= warnViolThresh) {
     isWarning = true;
     reasons.push(`Terdapat ${activeViolations.length} catatan pelanggaran belum selesai`);
   }

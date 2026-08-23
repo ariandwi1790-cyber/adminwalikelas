@@ -1,0 +1,6 @@
+{
+  "name": "Wali Kelas Management System",
+  "description": "Aplikasi terintegrasi administrasi digital wali kelas untuk pengelolaan data siswa, orang tua, presensi, kedisiplinan, pelanggaran, pembinaan, home visit, catatan, prestasi, komunikasi, dan laporan.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

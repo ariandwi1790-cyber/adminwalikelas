@@ -47,51 +47,83 @@ let cachedAccessToken: string | null = null;
 export const PRESET_ACCOUNTS: AppAccount[] = [
   {
     uid: 'preset-wali-1',
+    username: 'ahmad',
     displayName: 'Ahmad Subari, S.Pd',
     email: 'ahmad.subari@smkn1.sch.id',
     role: 'Wali Kelas X TKR B',
     nip: '19850315 201001 1 012',
     classAssigned: 'cls-x-tkr-b',
     schoolName: 'SMK Negeri 1 Kota',
-    avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'
+    avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+    password: 'password123'
   },
   {
     uid: 'preset-wali-2',
+    username: 'siti',
     displayName: 'Siti Rahmawati, S.Pd',
     email: 'siti.rahma@smkn1.sch.id',
     role: 'Wali Kelas XI TKJ A',
     nip: '19890422 201402 2 005',
     classAssigned: 'cls-xi-tkj-a',
     schoolName: 'SMK Negeri 1 Kota',
-    avatarUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80'
+    avatarUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
+    password: 'password123'
   },
   {
     uid: 'preset-bk-1',
+    username: 'hendra',
     displayName: 'Hendra Wijaya, M.Pd, Kons',
     email: 'hendra.bk@smkn1.sch.id',
     role: 'Guru Bimbingan Konseling (BK)',
     nip: '19820710 200801 1 009',
     schoolName: 'SMK Negeri 1 Kota',
-    avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80'
+    avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
+    password: 'password123'
   },
   {
     uid: 'preset-kepsek',
+    username: 'kepsek',
     displayName: 'Drs. Bambang Sudarmono, M.M',
     email: 'kepsek@smkn1.sch.id',
     role: 'Kepala Sekolah',
     nip: '19681120 199403 1 003',
     schoolName: 'SMK Negeri 1 Kota',
-    avatarUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80'
+    avatarUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
+    password: 'password123'
   },
   {
     uid: 'preset-admin',
+    username: 'admin',
     displayName: 'Tim Administrasi & Kesiswaan',
     email: 'kesiswaan@smkn1.sch.id',
     role: 'Administrator Sistem',
     schoolName: 'SMK Negeri 1 Kota',
-    avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80'
+    avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
+    password: 'password123'
   }
 ];
+
+export const getRegisteredAccounts = (): AppAccount[] => {
+  try {
+    const raw = localStorage.getItem('wali_registered_accounts');
+    if (raw) {
+      return JSON.parse(raw);
+    }
+  } catch (e) {
+    console.error('Error reading registered accounts:', e);
+  }
+  return [];
+};
+
+export const saveRegisteredAccount = (account: AppAccount) => {
+  try {
+    const existing = getRegisteredAccounts();
+    const updated = [account, ...existing.filter(a => a.uid !== account.uid && a.username !== account.username && a.email !== account.email)];
+    localStorage.setItem('wali_registered_accounts', JSON.stringify(updated));
+  } catch (e) {
+    console.error('Error saving registered account:', e);
+  }
+};
 
 export const initAuth = (
   onAuthSuccess?: (user: User, token: string) => void,

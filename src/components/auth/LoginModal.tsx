@@ -3,7 +3,6 @@ import { useDatabase } from '../../context/DatabaseContext';
 import { PRESET_ACCOUNTS } from '../../services/firebase';
 import { AppAccount } from '../../types';
 import { 
-  UserCheck, 
   LogIn, 
   Mail, 
   Lock, 
@@ -11,12 +10,18 @@ import {
   X, 
   School, 
   ShieldCheck, 
-  GraduationCap, 
   ChevronRight, 
   Check, 
   Sparkles,
   RefreshCw,
-  AlertCircle
+  AlertCircle,
+  Eye,
+  EyeOff,
+  AtSign,
+  UserPlus,
+  Trash2,
+  KeyRound,
+  LogOut
 } from 'lucide-react';
 
 interface LoginModalProps {
@@ -27,22 +32,30 @@ interface LoginModalProps {
 export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
   const { 
     currentUser, 
+    registeredAccounts,
     loginWithPreset, 
-    loginWithEmail, 
+    loginWithUsernameOrEmail,
     registerWithEmail, 
+    deleteRegisteredAccount,
     loginGoogleUser, 
     logoutUser 
   } = useDatabase();
 
-  const [activeTab, setActiveTab] = useState<'preset' | 'email' | 'google'>('preset');
+  const [activeTab, setActiveTab] = useState<'username_email' | 'preset' | 'google'>('username_email');
   const [isRegisterMode, setIsRegisterMode] = useState(false);
 
-  // Email form state
-  const [email, setEmail] = useState('');
+  // Form states
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
-  const [displayName, setDisplayName] = useState('');
-  const [role, setRole] = useState('Wali Kelas');
-  const [nip, setNip] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  
+  // Register specific fields
+  const [regUsername, setRegUsername] = useState('');
+  const [regDisplayName, setRegDisplayName] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regRole, setRegRole] = useState('Wali Kelas');
+  const [regNip, setRegNip] = useState('');
+
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -61,21 +74,41 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
     }
   };
 
-  const handleEmailAuth = async (e: React.FormEvent) => {
+  const handleQuickFill = (username: string) => {
+    setIdentifier(username);
+    setPassword('password123');
+    setActiveTab('username_email');
+    setIsRegisterMode(false);
+  };
+
+  const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setErrorMessage(null);
 
     try {
       if (isRegisterMode) {
-        if (!displayName.trim()) throw new Error('Nama lengkap wajib diisi');
-        await registerWithEmail(email, password, displayName, role, nip);
+        if (!regDisplayName.trim()) throw new Error('Nama lengkap wajib diisi.');
+        if (!regUsername.trim()) throw new Error('Username wajib diisi.');
+        if (!password || password.length < 6) throw new Error('Password minimal 6 karakter.');
+
+        await registerWithEmail(
+          regEmail.trim(), 
+          password, 
+          regDisplayName.trim(), 
+          regRole, 
+          regNip.trim(), 
+          regUsername.trim()
+        );
       } else {
-        await loginWithEmail(email, password);
+        if (!identifier.trim()) throw new Error('Silakan masukkan Username atau Email.');
+        if (!password) throw new Error('Silakan masukkan Password.');
+
+        await loginWithUsernameOrEmail(identifier.trim(), password);
       }
       onClose();
     } catch (err: any) {
-      setErrorMessage(err.message || 'Autentikasi gagal. Periksa data Anda.');
+      setErrorMessage(err.message || 'Autentikasi gagal. Periksa kembali username/email & password.');
     } finally {
       setIsLoading(false);
     }
@@ -97,18 +130,18 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
       <div 
-        className="bg-white rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl border border-zinc-200 animate-in zoom-in-95 duration-150 flex flex-col max-h-[90vh]"
+        className="bg-white rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl border border-zinc-200 animate-in zoom-in-95 duration-150 flex flex-col max-h-[92vh]"
         role="dialog"
         aria-modal="true"
       >
         {/* Modal Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-700 p-5 text-white flex items-center justify-between">
+        <div className="bg-gradient-to-r from-blue-700 via-indigo-700 to-blue-800 p-5 text-white flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-white/15 backdrop-blur-xs flex items-center justify-center text-white border border-white/20">
+            <div className="w-10 h-10 rounded-xl bg-white/15 backdrop-blur-xs flex items-center justify-center text-white border border-white/20 shadow-inner">
               <School className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold tracking-tight">Akun & Akses Pengguna</h2>
+              <h2 className="text-base font-bold tracking-tight">Login Pengguna & Akun</h2>
               <p className="text-xs text-blue-100 mt-0.5">Sistem Manajemen Wali Kelas & Presensi</p>
             </div>
           </div>
@@ -117,18 +150,28 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
             onClick={onClose}
             disabled={isLoading}
             className="text-white/80 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition cursor-pointer"
+            aria-label="Tutup"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Currently Logged In Account Alert if any */}
-        {currentUser && (
+        {currentUser ? (
           <div className="bg-emerald-50 border-b border-emerald-100 p-3.5 px-5 flex items-center justify-between">
             <div className="flex items-center space-x-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-full bg-emerald-600 text-white font-bold text-xs flex items-center justify-center flex-shrink-0">
-                {(currentUser.displayName || currentUser.email || 'U')[0].toUpperCase()}
-              </div>
+              {currentUser.photoURL ? (
+                <img 
+                  src={currentUser.photoURL} 
+                  alt="User" 
+                  className="w-9 h-9 rounded-full border border-emerald-300 object-cover flex-shrink-0"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <div className="w-9 h-9 rounded-full bg-emerald-600 text-white font-bold text-xs flex items-center justify-center flex-shrink-0">
+                  {(currentUser.displayName || currentUser.email || 'U')[0].toUpperCase()}
+                </div>
+              )}
               <div className="min-w-0">
                 <p className="text-xs font-bold text-emerald-950 truncate flex items-center gap-1.5">
                   <span>{currentUser.displayName || 'Pengguna'}</span>
@@ -138,21 +181,44 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                     </span>
                   )}
                 </p>
-                <p className="text-[11px] text-emerald-700 truncate">{currentUser.email}</p>
+                <p className="text-[11px] text-emerald-700 truncate">
+                  {currentUser.username ? `@${currentUser.username} • ` : ''}{currentUser.email}
+                </p>
               </div>
             </div>
 
             <button
-              onClick={() => logoutUser()}
-              className="text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1 rounded-lg transition cursor-pointer flex-shrink-0"
+              onClick={() => {
+                logoutUser();
+              }}
+              className="text-xs font-bold text-rose-700 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-3 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1 flex-shrink-0"
             >
-              Keluar
+              <LogOut className="w-3.5 h-3.5 text-rose-600" />
+              <span>Log Out</span>
             </button>
+          </div>
+        ) : (
+          <div className="bg-amber-50 border-b border-amber-200/70 px-5 py-2.5 text-xs text-amber-800 flex items-center gap-2">
+            <KeyRound className="w-4 h-4 text-amber-600 flex-shrink-0" />
+            <span>Anda belum login. Silakan masuk dengan Username/Email di bawah.</span>
           </div>
         )}
 
         {/* Tab Selector */}
-        <div className="flex border-b border-zinc-200 bg-zinc-50/80 px-4 pt-2 gap-2">
+        <div className="flex border-b border-zinc-200 bg-zinc-50/90 px-4 pt-2 gap-2">
+          <button
+            type="button"
+            onClick={() => { setActiveTab('username_email'); setErrorMessage(null); }}
+            className={`pb-2.5 px-3 text-xs font-bold transition flex items-center space-x-1.5 border-b-2 cursor-pointer ${
+              activeTab === 'username_email'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-zinc-500 hover:text-zinc-800'
+            }`}
+          >
+            <AtSign className="w-3.5 h-3.5" />
+            <span>Login Email / Username</span>
+          </button>
+
           <button
             type="button"
             onClick={() => { setActiveTab('preset'); setErrorMessage(null); }}
@@ -163,20 +229,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
             }`}
           >
             <Sparkles className="w-3.5 h-3.5" />
-            <span>Pilih Akun Guru</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => { setActiveTab('email'); setErrorMessage(null); }}
-            className={`pb-2.5 px-3 text-xs font-bold transition flex items-center space-x-1.5 border-b-2 cursor-pointer ${
-              activeTab === 'email'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-zinc-500 hover:text-zinc-800'
-            }`}
-          >
-            <Mail className="w-3.5 h-3.5" />
-            <span>Email & Password</span>
+            <span>Akun Guru Cepat</span>
           </button>
 
           <button
@@ -203,19 +256,275 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
 
         {/* Tab Contents */}
         <div className="p-5 overflow-y-auto flex-1 space-y-4">
-          {/* TAB 1: PRESET ACCOUNTS */}
+          
+          {/* TAB 1: USERNAME & EMAIL LOGIN / REGISTRATION */}
+          {activeTab === 'username_email' && (
+            <form onSubmit={handleAuthSubmit} className="space-y-4">
+              <div className="flex items-center justify-between pb-1">
+                <span className="text-xs text-zinc-700 font-bold">
+                  {isRegisterMode ? 'Daftar Akun Baru' : 'Masuk dengan Email / Username'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsRegisterMode(!isRegisterMode);
+                    setErrorMessage(null);
+                  }}
+                  className="text-xs font-bold text-blue-600 hover:text-blue-700 underline cursor-pointer"
+                >
+                  {isRegisterMode ? 'Sudah punya akun? Masuk' : '+ Buat Akun Baru'}
+                </button>
+              </div>
+
+              {isRegisterMode ? (
+                /* REGISTRATION FORM */
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-zinc-700 mb-1">
+                      Username <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <AtSign className="w-4 h-4 absolute left-3 top-2.5 text-zinc-400" />
+                      <input
+                        type="text"
+                        required
+                        placeholder="cth: ahmad_subari atau guru_bk"
+                        value={regUsername}
+                        onChange={(e) => setRegUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_.]/g, ''))}
+                        className="w-full pl-9 pr-3 py-2 text-xs border border-zinc-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-zinc-50/50"
+                      />
+                    </div>
+                    <p className="text-[10px] text-zinc-500 mt-1">Gunakan huruf kecil, angka, atau garis bawah.</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-zinc-700 mb-1">
+                      Nama Lengkap & Gelar <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <UserIcon className="w-4 h-4 absolute left-3 top-2.5 text-zinc-400" />
+                      <input
+                        type="text"
+                        required
+                        placeholder="cth: Budi Santoso, S.Pd"
+                        value={regDisplayName}
+                        onChange={(e) => setRegDisplayName(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2 text-xs border border-zinc-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] font-bold text-zinc-700 mb-1">Peran / Jabatan</label>
+                      <select
+                        value={regRole}
+                        onChange={(e) => setRegRole(e.target.value)}
+                        className="w-full px-2.5 py-2 text-xs border border-zinc-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
+                      >
+                        <option value="Wali Kelas">Wali Kelas</option>
+                        <option value="Guru BK">Guru BK</option>
+                        <option value="Kepala Sekolah">Kepala Sekolah</option>
+                        <option value="Guru Pengajar">Guru Pengajar</option>
+                        <option value="Administrator">Administrator</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-zinc-700 mb-1">NIP (Opsional)</label>
+                      <input
+                        type="text"
+                        placeholder="1980xxxx..."
+                        value={regNip}
+                        onChange={(e) => setRegNip(e.target.value)}
+                        className="w-full px-2.5 py-2 text-xs border border-zinc-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-zinc-700 mb-1">Email (Opsional / Otomatis)</label>
+                    <div className="relative">
+                      <Mail className="w-4 h-4 absolute left-3 top-2.5 text-zinc-400" />
+                      <input
+                        type="email"
+                        placeholder="nama@sekolah.sch.id"
+                        value={regEmail}
+                        onChange={(e) => setRegEmail(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2 text-xs border border-zinc-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-zinc-700 mb-1">
+                      Kata Sandi (Password) <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <Lock className="w-4 h-4 absolute left-3 top-2.5 text-zinc-400" />
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        required
+                        minLength={6}
+                        placeholder="Minimal 6 karakter"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="w-full pl-9 pr-10 py-2 text-xs border border-zinc-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-2.5 text-zinc-400 hover:text-zinc-600 cursor-pointer"
+                        tabIndex={-1}
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* LOGIN FORM */
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-zinc-700 mb-1">
+                      Email atau Username
+                    </label>
+                    <div className="relative">
+                      <UserIcon className="w-4 h-4 absolute left-3 top-2.5 text-zinc-400" />
+                      <input
+                        type="text"
+                        required
+                        autoFocus
+                        placeholder="cth: ahmad, siti, kepsek, atau email"
+                        value={identifier}
+                        onChange={(e) => setIdentifier(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2.5 text-xs border border-zinc-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[11px] font-bold text-zinc-700">Kata Sandi (Password)</label>
+                      <span className="text-[10px] text-zinc-400">Default: password123</span>
+                    </div>
+                    <div className="relative">
+                      <Lock className="w-4 h-4 absolute left-3 top-2.5 text-zinc-400" />
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        required
+                        placeholder="Masukkan password akun Anda"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="w-full pl-9 pr-10 py-2.5 text-xs border border-zinc-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-2.5 text-zinc-400 hover:text-zinc-600 cursor-pointer"
+                        tabIndex={-1}
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Quick Username Shortcut Pills */}
+                  <div className="pt-1">
+                    <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5">
+                      Username Demo Cepat:
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        { u: 'ahmad', label: 'Wali X TKR B' },
+                        { u: 'siti', label: 'Wali XI TKJ A' },
+                        { u: 'hendra', label: 'Guru BK' },
+                        { u: 'kepsek', label: 'Kepala Sekolah' },
+                        { u: 'admin', label: 'Admin' }
+                      ].map((item) => (
+                        <button
+                          key={item.u}
+                          type="button"
+                          onClick={() => handleQuickFill(item.u)}
+                          className="px-2.5 py-1 bg-zinc-100 hover:bg-blue-50 hover:text-blue-700 text-zinc-700 rounded-lg text-[11px] font-medium border border-zinc-200 transition cursor-pointer"
+                        >
+                          <span className="font-bold">@{item.u}</span> ({item.label})
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer flex items-center justify-center space-x-1.5 disabled:opacity-50 min-h-[42px]"
+              >
+                {isLoading ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : isRegisterMode ? (
+                  <UserPlus className="w-4 h-4" />
+                ) : (
+                  <LogIn className="w-4 h-4" />
+                )}
+                <span>{isLoading ? 'Memproses...' : isRegisterMode ? 'Daftarkan Akun Baru' : 'Masuk Sekarang'}</span>
+              </button>
+
+              {/* Custom Registered Accounts List if any */}
+              {registeredAccounts && registeredAccounts.length > 0 && !isRegisterMode && (
+                <div className="pt-2 border-t border-zinc-100">
+                  <p className="text-[11px] font-bold text-zinc-700 mb-2">Akun yang Dibuat di Perangkat Ini:</p>
+                  <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                    {registeredAccounts.map(acc => (
+                      <div 
+                        key={acc.uid} 
+                        className="flex items-center justify-between p-2 bg-zinc-50 hover:bg-blue-50/60 rounded-xl border border-zinc-200 text-xs transition"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => handleSelectPreset(acc)}
+                          className="flex items-center space-x-2 text-left min-w-0 flex-1 cursor-pointer"
+                        >
+                          <div className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-[10px] flex items-center justify-center flex-shrink-0">
+                            {(acc.displayName || 'U')[0]}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-bold text-zinc-900 truncate text-[11px]">{acc.displayName}</p>
+                            <p className="text-[10px] text-zinc-500 truncate">@{acc.username || acc.email} • {acc.role}</p>
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteRegisteredAccount && deleteRegisteredAccount(acc.uid);
+                          }}
+                          className="p-1 text-zinc-400 hover:text-rose-600 rounded hover:bg-rose-50 transition cursor-pointer"
+                          title="Hapus akun lokal"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </form>
+          )}
+
+          {/* TAB 2: PRESET TEACHER ACCOUNTS */}
           {activeTab === 'preset' && (
             <div className="space-y-3">
               <div className="bg-blue-50/70 border border-blue-100 rounded-xl p-3 text-xs text-blue-900 leading-relaxed flex items-start space-x-2">
                 <ShieldCheck className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
                 <span>
-                  Pilih salah satu profil guru atau wali kelas di bawah untuk langsung beralih dan masuk ke sistem:
+                  Pilih salah satu profil guru atau wali kelas resmi berikut untuk langsung masuk:
                 </span>
               </div>
 
               <div className="space-y-2">
                 {PRESET_ACCOUNTS.map((acc) => {
-                  const isActive = currentUser?.email === acc.email;
+                  const isActive = currentUser?.email === acc.email || currentUser?.username === acc.username;
                   return (
                     <button
                       key={acc.uid}
@@ -249,7 +558,14 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                         </div>
 
                         <div className="min-w-0">
-                          <p className="text-xs font-bold text-zinc-900 truncate">{acc.displayName}</p>
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-xs font-bold text-zinc-900 truncate">{acc.displayName}</p>
+                            {acc.username && (
+                              <span className="px-1.5 py-0.2 bg-zinc-100 text-zinc-600 rounded text-[9px] font-semibold">
+                                @{acc.username}
+                              </span>
+                            )}
+                          </div>
                           <p className="text-[11px] font-semibold text-blue-700 truncate">{acc.role}</p>
                           <p className="text-[10px] text-zinc-500 truncate">{acc.email} {acc.nip ? `• NIP ${acc.nip}` : ''}</p>
                         </div>
@@ -257,12 +573,12 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
 
                       <div className="flex items-center space-x-1 text-xs text-zinc-400 flex-shrink-0 ml-2">
                         {isActive ? (
-                          <span className="text-xs font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full">
+                          <span className="text-xs font-bold text-emerald-600 bg-emerald-100 px-2.5 py-1 rounded-full">
                             Aktif
                           </span>
                         ) : (
                           <span className="text-xs font-semibold text-blue-600 flex items-center">
-                            Masuk <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
+                            Pilih <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
                           </span>
                         )}
                       </div>
@@ -271,117 +587,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                 })}
               </div>
             </div>
-          )}
-
-          {/* TAB 2: EMAIL & PASSWORD */}
-          {activeTab === 'email' && (
-            <form onSubmit={handleEmailAuth} className="space-y-3.5">
-              <div className="flex items-center justify-between pb-1">
-                <span className="text-xs text-zinc-600 font-medium">
-                  {isRegisterMode ? 'Daftarkan Akun Guru Baru' : 'Masuk dengan Akun Terdaftar'}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsRegisterMode(!isRegisterMode);
-                    setErrorMessage(null);
-                  }}
-                  className="text-xs font-bold text-blue-600 hover:text-blue-700 underline cursor-pointer"
-                >
-                  {isRegisterMode ? 'Sudah punya akun? Masuk' : 'Daftar akun baru'}
-                </button>
-              </div>
-
-              {isRegisterMode && (
-                <>
-                  <div>
-                    <label className="block text-[11px] font-bold text-zinc-700 mb-1">Nama Lengkap & Gelar</label>
-                    <div className="relative">
-                      <UserIcon className="w-4 h-4 absolute left-3 top-2.5 text-zinc-400" />
-                      <input
-                        type="text"
-                        required
-                        placeholder="cth: Budi Santoso, S.Pd"
-                        value={displayName}
-                        onChange={(e) => setDisplayName(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 text-xs border border-zinc-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-[11px] font-bold text-zinc-700 mb-1">Peran / Jabatan</label>
-                      <select
-                        value={role}
-                        onChange={(e) => setRole(e.target.value)}
-                        className="w-full px-2.5 py-2 text-xs border border-zinc-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      >
-                        <option value="Wali Kelas">Wali Kelas</option>
-                        <option value="Guru BK">Guru BK</option>
-                        <option value="Kepala Sekolah">Kepala Sekolah</option>
-                        <option value="Guru Pengajar">Guru Pengajar</option>
-                        <option value="Administrator">Administrator</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-bold text-zinc-700 mb-1">NIP (Opsional)</label>
-                      <input
-                        type="text"
-                        placeholder="1980xxxx..."
-                        value={nip}
-                        onChange={(e) => setNip(e.target.value)}
-                        className="w-full px-2.5 py-2 text-xs border border-zinc-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      />
-                    </div>
-                  </div>
-                </>
-              )}
-
-              <div>
-                <label className="block text-[11px] font-bold text-zinc-700 mb-1">Email Sekolah / Pribadi</label>
-                <div className="relative">
-                  <Mail className="w-4 h-4 absolute left-3 top-2.5 text-zinc-400" />
-                  <input
-                    type="email"
-                    required
-                    placeholder="nama@sekolah.sch.id"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 text-xs border border-zinc-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-zinc-700 mb-1">Kata Sandi (Password)</label>
-                <div className="relative">
-                  <Lock className="w-4 h-4 absolute left-3 top-2.5 text-zinc-400" />
-                  <input
-                    type="password"
-                    required
-                    minLength={6}
-                    placeholder="Minimal 6 karakter"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 text-xs border border-zinc-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer flex items-center justify-center space-x-1.5 disabled:opacity-50 min-h-[42px]"
-              >
-                {isLoading ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                ) : (
-                  <LogIn className="w-4 h-4" />
-                )}
-                <span>{isLoading ? 'Memproses...' : isRegisterMode ? 'Daftar Akun Guru' : 'Masuk ke Sistem'}</span>
-              </button>
-            </form>
           )}
 
           {/* TAB 3: GOOGLE AUTH */}

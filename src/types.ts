@@ -373,6 +373,7 @@ export interface StudentFullData {
 
 export interface AppAccount {
   uid: string;
+  username?: string;
   email: string;
   displayName: string;
   role: string;
@@ -380,14 +381,17 @@ export interface AppAccount {
   avatarUrl?: string;
   classAssigned?: string;
   schoolName?: string;
+  password?: string;
 }
 
 export interface AppUser {
   uid: string;
+  username?: string;
   email: string | null;
   displayName: string | null;
   photoURL?: string | null;
   role?: string;
   nip?: string;
+  classAssigned?: string;
   isPreset?: boolean;
 }

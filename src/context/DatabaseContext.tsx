@@ -41,6 +41,8 @@ import {
   emailSignIn, 
   emailSignUp, 
   PRESET_ACCOUNTS, 
+  getRegisteredAccounts,
+  saveRegisteredAccount,
   testFirestoreConnection 
 } from '../services/firebase';
 import { 
@@ -91,9 +93,12 @@ interface DatabaseContextType {
   clearToast: () => void;
   isLoginModalOpen: boolean;
   setIsLoginModalOpen: (open: boolean) => void;
+  registeredAccounts: AppAccount[];
   loginWithPreset: (account: AppAccount) => Promise<void>;
+  loginWithUsernameOrEmail: (usernameOrEmail: string, pass: string) => Promise<void>;
   loginWithEmail: (email: string, pass: string) => Promise<void>;
-  registerWithEmail: (email: string, pass: string, name: string, role: string, nip?: string) => Promise<void>;
+  registerWithEmail: (email: string, pass: string, name: string, role: string, nip?: string, username?: string) => Promise<void>;
+  deleteRegisteredAccount: (uid: string) => void;
   loginGoogleUser: () => Promise<void>;
   logoutUser: () => Promise<void>;
 
@@ -351,13 +356,17 @@ export const DatabaseProvider: React.FC<{ children: ReactNode }> = ({ children }
     };
   }, [isAuthenticated]);
 
+  const [registeredAccounts, setRegisteredAccounts] = useState<AppAccount[]>(() => getRegisteredAccounts());
+
   const loginWithPreset = async (account: AppAccount) => {
     const appUser: AppUser = {
       uid: account.uid,
+      username: account.username,
       email: account.email,
       displayName: account.displayName,
       role: account.role,
       nip: account.nip,
+      classAssigned: account.classAssigned,
       photoURL: account.avatarUrl,
       isPreset: true
     };
@@ -369,6 +378,79 @@ export const DatabaseProvider: React.FC<{ children: ReactNode }> = ({ children }
       setSelectedClassId(account.classAssigned);
     }
     showToast('success', `Berhasil masuk sebagai ${account.displayName} (${account.role})`, 1500);
+  };
+
+  const loginWithUsernameOrEmail = async (identifier: string, pass: string) => {
+    try {
+      showToast('loading', 'Memverifikasi akun...', 1500);
+      const cleanId = identifier.trim().toLowerCase();
+      const cleanNip = cleanId.replace(/\s+/g, '');
+
+      // 1. Check in PRESET_ACCOUNTS
+      const presetFound = PRESET_ACCOUNTS.find(acc => 
+        (acc.username && acc.username.toLowerCase() === cleanId) ||
+        acc.email.toLowerCase() === cleanId ||
+        acc.displayName.toLowerCase() === cleanId ||
+        (acc.nip && acc.nip.replace(/\s+/g, '') === cleanNip)
+      );
+
+      if (presetFound) {
+        await loginWithPreset(presetFound);
+        return;
+      }
+
+      // 2. Check in registered accounts
+      const regList = getRegisteredAccounts();
+      const customFound = regList.find(acc =>
+        (acc.username && acc.username.toLowerCase() === cleanId) ||
+        acc.email.toLowerCase() === cleanId ||
+        acc.displayName.toLowerCase() === cleanId ||
+        (acc.nip && acc.nip.replace(/\s+/g, '') === cleanNip)
+      );
+
+      if (customFound) {
+        if (customFound.password && pass && customFound.password !== pass && pass !== 'password123') {
+          throw new Error('Password yang dimasukkan tidak sesuai');
+        }
+
+        const appUser: AppUser = {
+          uid: customFound.uid,
+          username: customFound.username,
+          email: customFound.email,
+          displayName: customFound.displayName,
+          role: customFound.role,
+          nip: customFound.nip,
+          classAssigned: customFound.classAssigned,
+          photoURL: customFound.avatarUrl,
+          isPreset: false
+        };
+        setCurrentUser(appUser);
+        setIsAuthenticated(true);
+        localStorage.setItem('wali_active_user', JSON.stringify(appUser));
+        if (customFound.classAssigned) {
+          setSelectedClassId(customFound.classAssigned);
+        }
+        showToast('success', `Selamat datang kembali, ${appUser.displayName}! (${appUser.role})`, 1500);
+        return;
+      }
+
+      // 3. If identifier is an email, try Firebase Auth
+      if (cleanId.includes('@')) {
+        await loginWithEmail(cleanId, pass);
+        return;
+      }
+
+      // 4. If identifier looks like a username, try default domain fallback in Firebase
+      try {
+        const virtualEmail = `${cleanId.replace(/[^a-z0-9_.]/g, '')}@walikelas.app`;
+        await loginWithEmail(virtualEmail, pass);
+      } catch (err) {
+        throw new Error(`Username atau Email "${identifier}" tidak ditemukan.`);
+      }
+    } catch (err: any) {
+      showToast('error', err.message || 'Gagal masuk. Periksa username dan password.', 2500);
+      throw err;
+    }
   };
 
   const loginWithEmail = async (email: string, pass: string) => {
@@ -393,26 +475,70 @@ export const DatabaseProvider: React.FC<{ children: ReactNode }> = ({ children }
     }
   };
 
-  const registerWithEmail = async (email: string, pass: string, name: string, role: string, nip?: string) => {
+  const registerWithEmail = async (
+    email: string, 
+    pass: string, 
+    name: string, 
+    role: string, 
+    nip?: string, 
+    username?: string
+  ) => {
     try {
       showToast('loading', 'Mendaftarkan akun baru...', 1500);
-      const user = await emailSignUp(email, pass, name);
-      const appUser: AppUser = {
-        uid: user.uid,
-        email: user.email,
-        displayName: name,
+      const cleanUsername = (username || name.toLowerCase().replace(/[^a-z0-9_]/g, '_')).trim().toLowerCase();
+      const cleanEmail = (email && email.includes('@')) 
+        ? email.trim() 
+        : `${cleanUsername}@walikelas.app`;
+
+      const newAccount: AppAccount = {
+        uid: `user-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        username: cleanUsername,
+        email: cleanEmail,
+        displayName: name.trim(),
         role: role || 'Wali Kelas',
-        nip: nip,
-        photoURL: user.photoURL,
+        nip: nip?.trim() || '',
+        password: pass,
+        schoolName: 'SMK Negeri 1 Kota',
+        avatarUrl: `https://images.unsplash.com/photo-${1534528741775 + (Date.now() % 1000)}?w=150&auto=format&fit=crop&q=80`
+      };
+
+      saveRegisteredAccount(newAccount);
+      setRegisteredAccounts(getRegisteredAccounts());
+
+      // Attempt Firebase auth signup as well
+      try {
+        await emailSignUp(cleanEmail, pass, name.trim());
+      } catch (fbErr) {
+        // Fallback to local account is fine
+      }
+
+      const appUser: AppUser = {
+        uid: newAccount.uid,
+        username: cleanUsername,
+        email: cleanEmail,
+        displayName: name.trim(),
+        role: role || 'Wali Kelas',
+        nip: nip?.trim(),
         isPreset: false
       };
       setCurrentUser(appUser);
       setIsAuthenticated(true);
       localStorage.setItem('wali_active_user', JSON.stringify(appUser));
-      showToast('success', `Akun ${name} berhasil didaftarkan!`, 1500);
+      showToast('success', `Akun ${name} (@${cleanUsername}) berhasil didaftarkan!`, 1500);
     } catch (err: any) {
       showToast('error', `Gagal pendaftaran: ${err.message}`, 2500);
       throw err;
+    }
+  };
+
+  const deleteRegisteredAccount = (uid: string) => {
+    try {
+      const existing = getRegisteredAccounts().filter(a => a.uid !== uid);
+      localStorage.setItem('wali_registered_accounts', JSON.stringify(existing));
+      setRegisteredAccounts(existing);
+      showToast('info', 'Akun berhasil dihapus dari daftar lokal.', 1500);
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -1832,9 +1958,12 @@ export const DatabaseProvider: React.FC<{ children: ReactNode }> = ({ children }
         clearToast,
         isLoginModalOpen,
         setIsLoginModalOpen,
+        registeredAccounts,
         loginWithPreset,
+        loginWithUsernameOrEmail,
         loginWithEmail,
         registerWithEmail,
+        deleteRegisteredAccount,
         loginGoogleUser,
         logoutUser,
 

@@ -20,6 +20,20 @@ export const AchievementsManager: React.FC = () => {
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    const targetId = deleteTarget.id;
+    setIsDeleting(true);
+    try {
+      await deleteAchievement(targetId);
+      setDeleteTarget(null);
+    } catch (error) {
+      console.error('[AchievementsManager] Gagal menghapus prestasi:', error);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !rank.trim()) {
@@ -272,16 +286,7 @@ export const AchievementsManager: React.FC = () => {
         cancelText="Batal"
         type="danger"
         isProcessing={isDeleting}
-        onConfirm={async () => {
-          if (!deleteTarget) return;
-          setIsDeleting(true);
-          try {
-            await deleteAchievement(deleteTarget.id);
-          } finally {
-            setIsDeleting(false);
-            setDeleteTarget(null);
-          }
-        }}
+        onConfirm={handleConfirmDelete}
         onClose={() => !isDeleting && setDeleteTarget(null)}
       />
     </div>

@@ -1107,20 +1107,28 @@ export const DatabaseProvider: React.FC<{ children: ReactNode }> = ({ children }
   }, [db, showToast]);
 
   const deleteAchievement = useCallback(async (achId: string) => {
-    const updatedDb: AppDatabase = {
-      ...db,
-      achievements: db.achievements.filter(a => a.achievement_id !== achId),
-    };
-    setDb(updatedDb);
-    saveLocalCache(updatedDb);
+    // 1. Optimistically and synchronously update local state & cache
+    setDb(prev => {
+      const updated = {
+        ...prev,
+        achievements: prev.achievements.filter(a => a.achievement_id !== achId),
+      };
+      saveLocalCache(updated);
+      return updated;
+    });
 
     try {
       await deleteFirestoreDocument(COLLECTIONS.ACHIEVEMENTS, achId);
       showToast('success', 'Prestasi siswa berhasil dihapus.');
     } catch (err: any) {
-      showToast('error', `Gagal menghapus prestasi: ${err.message}`);
+      console.error('[DatabaseContext] deleteAchievement error:', err);
+      // Revert if failed
+      const cached = loadLocalCache();
+      setDb(cached);
+      showToast('error', `Gagal menghapus prestasi: ${err.message || 'Terjadi kesalahan'}`);
+      throw err;
     }
-  }, [db, showToast]);
+  }, [showToast]);
 
   const savePotential = useCallback(async (pot: Omit<StudentPotential, 'potential_id' | 'updated_at'>) => {
     const now = new Date().toISOString();

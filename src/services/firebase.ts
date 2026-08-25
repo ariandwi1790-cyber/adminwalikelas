@@ -2,6 +2,9 @@ import { initializeApp, getApps, getApp } from 'firebase/app';
 import { 
   getAuth, 
   signInWithPopup, 
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile,
   GoogleAuthProvider, 
   onAuthStateChanged, 
   signOut, 
@@ -14,6 +17,7 @@ import {
   enableIndexedDbPersistence 
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
+import { AppAccount, AppUser } from '../types';
 
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 export const auth = getAuth(app);
@@ -40,6 +44,55 @@ provider.setCustomParameters({
 
 let cachedAccessToken: string | null = null;
 
+export const PRESET_ACCOUNTS: AppAccount[] = [
+  {
+    uid: 'preset-wali-1',
+    displayName: 'Ahmad Subari, S.Pd',
+    email: 'ahmad.subari@smkn1.sch.id',
+    role: 'Wali Kelas X TKR B',
+    nip: '19850315 201001 1 012',
+    classAssigned: 'cls-x-tkr-b',
+    schoolName: 'SMK Negeri 1 Kota',
+    avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'
+  },
+  {
+    uid: 'preset-wali-2',
+    displayName: 'Siti Rahmawati, S.Pd',
+    email: 'siti.rahma@smkn1.sch.id',
+    role: 'Wali Kelas XI TKJ A',
+    nip: '19890422 201402 2 005',
+    classAssigned: 'cls-xi-tkj-a',
+    schoolName: 'SMK Negeri 1 Kota',
+    avatarUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80'
+  },
+  {
+    uid: 'preset-bk-1',
+    displayName: 'Hendra Wijaya, M.Pd, Kons',
+    email: 'hendra.bk@smkn1.sch.id',
+    role: 'Guru Bimbingan Konseling (BK)',
+    nip: '19820710 200801 1 009',
+    schoolName: 'SMK Negeri 1 Kota',
+    avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80'
+  },
+  {
+    uid: 'preset-kepsek',
+    displayName: 'Drs. Bambang Sudarmono, M.M',
+    email: 'kepsek@smkn1.sch.id',
+    role: 'Kepala Sekolah',
+    nip: '19681120 199403 1 003',
+    schoolName: 'SMK Negeri 1 Kota',
+    avatarUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80'
+  },
+  {
+    uid: 'preset-admin',
+    displayName: 'Tim Administrasi & Kesiswaan',
+    email: 'kesiswaan@smkn1.sch.id',
+    role: 'Administrator Sistem',
+    schoolName: 'SMK Negeri 1 Kota',
+    avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80'
+  }
+];
+
 export const initAuth = (
   onAuthSuccess?: (user: User, token: string) => void,
   onAuthFailure?: () => void
@@ -65,6 +118,19 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
   }
 };
 
+export const emailSignIn = async (email: string, pass: string): Promise<User> => {
+  const result = await signInWithEmailAndPassword(auth, email, pass);
+  return result.user;
+};
+
+export const emailSignUp = async (email: string, pass: string, displayName: string): Promise<User> => {
+  const result = await createUserWithEmailAndPassword(auth, email, pass);
+  if (displayName && result.user) {
+    await updateProfile(result.user, { displayName });
+  }
+  return result.user;
+};
+
 export const getCachedAccessToken = (): string | null => {
   return cachedAccessToken;
 };
@@ -76,7 +142,6 @@ export const logoutGoogle = async () => {
 
 export async function testFirestoreConnection(): Promise<boolean> {
   try {
-    // If signed in, test ping to doc
     if (auth.currentUser) {
       await getDocFromServer(doc(db, 'test', 'connection'));
     }
@@ -86,7 +151,6 @@ export async function testFirestoreConnection(): Promise<boolean> {
       console.warn('Firestore client is offline or network unreachable.');
       return false;
     }
-    // Permission or existence response also implies network connectivity
     return true;
   }
 }

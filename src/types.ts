@@ -236,11 +236,23 @@ export interface ParentCommunication {
 }
 
 export type ParentCommunicationRecord = ParentCommunication;
-export type DisciplineFactorWeights = DisciplineSettings;
-export type EarlyWarningThresholds = EarlyWarningSettings;
 export type DuplicateHandling = 'create_new' | 'update_existing' | 'skip';
 export type ExcelImportRow = any;
 export type ExcelMappingConfig = any;
+
+export interface DisciplineFactorWeights {
+  attendance_weight: number;
+  punctuality_weight: number;
+  violation_weight: number;
+  compliance_weight: number;
+  responsibility_weight: number;
+}
+
+export interface EarlyWarningThresholds {
+  min_attendance_rate: number;
+  max_alpa_count: number;
+  max_violation_points: number;
+}
 
 export interface DisciplineSettings {
   weight_attendance: number; // default 30
@@ -274,6 +286,8 @@ export interface SchoolSettings {
   current_class_id: string;
   discipline_settings: DisciplineSettings;
   early_warning_settings: EarlyWarningSettings;
+  discipline_weights?: DisciplineFactorWeights;
+  early_warning_thresholds?: EarlyWarningThresholds;
 }
 
 export interface PeriodicEvaluation {
@@ -355,4 +369,25 @@ export interface StudentFullData {
   achievement_count: number;
   notes_count: number;
   comm_count: number;
+}
+
+export interface AppAccount {
+  uid: string;
+  email: string;
+  displayName: string;
+  role: string;
+  nip?: string;
+  avatarUrl?: string;
+  classAssigned?: string;
+  schoolName?: string;
+}
+
+export interface AppUser {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL?: string | null;
+  role?: string;
+  nip?: string;
+  isPreset?: boolean;
 }

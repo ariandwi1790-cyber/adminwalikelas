@@ -14,7 +14,10 @@ import {
   LogOut, 
   User as UserIcon, 
   CheckCircle2, 
-  Database 
+  Database,
+  UserCheck,
+  ChevronDown,
+  Sparkles
 } from 'lucide-react';
 import { exportDatabaseBackup } from '../../db/storage';
 import { ConfirmModal } from '../common/ConfirmModal';
@@ -44,7 +47,7 @@ export const Header: React.FC<HeaderProps> = ({
     isSyncing,
     isOffline,
     lastSyncTime,
-    loginGoogleUser,
+    setIsLoginModalOpen,
     logoutUser,
     localDataAvailableForMigration,
     localDataCount,
@@ -220,55 +223,93 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="hidden md:inline font-bold">Backup</span>
             </button>
 
-            {/* Google Auth Avatar / Login */}
+            {/* Multi-Account Login / User Profile */}
             <div className="relative">
-              {isAuthenticated && currentUser ? (
+              {currentUser ? (
                 <button
                   id="btn-header-user-profile"
                   onClick={() => setShowUserDropdown(prev => !prev)}
-                  className="flex items-center gap-1.5 p-1 rounded-full hover:ring-2 hover:ring-blue-400 transition cursor-pointer"
+                  className="flex items-center gap-1.5 p-1 sm:px-2 sm:py-1 rounded-xl hover:bg-zinc-100 border border-zinc-200/80 transition cursor-pointer"
                   title={`Akun: ${currentUser.displayName || currentUser.email}`}
                 >
                   {currentUser.photoURL ? (
                     <img 
                       src={currentUser.photoURL} 
                       alt="User" 
-                      className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-zinc-300 object-cover" 
+                      className="w-7 h-7 rounded-full border border-zinc-300 object-cover" 
                       referrerPolicy="no-referrer"
                     />
                   ) : (
-                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center">
+                    <div className="w-7 h-7 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center">
                       {(currentUser.displayName || currentUser.email || 'U')[0].toUpperCase()}
                     </div>
                   )}
+                  <div className="hidden lg:block text-left max-w-[110px]">
+                    <p className="text-[11px] font-bold text-zinc-900 truncate leading-tight">
+                      {currentUser.displayName?.split(',')[0] || currentUser.displayName}
+                    </p>
+                    <p className="text-[9px] text-blue-600 font-semibold truncate leading-tight">
+                      {currentUser.role || 'Wali Kelas'}
+                    </p>
+                  </div>
+                  <ChevronDown className="w-3.5 h-3.5 text-zinc-400 hidden sm:block" />
                 </button>
               ) : (
                 <button
-                  id="btn-header-google-login"
-                  onClick={loginGoogleUser}
-                  className="flex items-center gap-1 px-2.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold rounded-lg shadow-xs transition cursor-pointer min-h-[36px]"
+                  id="btn-header-account-login"
+                  onClick={() => setIsLoginModalOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition cursor-pointer min-h-[36px]"
                 >
-                  <LogIn className="w-3.5 h-3.5 text-blue-400" />
-                  <span className="hidden sm:inline">Login Google</span>
+                  <LogIn className="w-3.5 h-3.5" />
+                  <span>Pilih Akun / Masuk</span>
                 </button>
               )}
 
-              {/* User Dropdown */}
-              {showUserDropdown && isAuthenticated && currentUser && (
-                <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border border-zinc-200 py-2 z-50 text-xs animate-in fade-in zoom-in-95 duration-150">
-                  <div className="px-3 py-2 border-b border-zinc-100">
-                    <p className="font-bold text-zinc-900 truncate">{currentUser.displayName || 'Pengguna'}</p>
-                    <p className="text-zinc-500 truncate text-[11px]">{currentUser.email}</p>
+              {/* User Account Dropdown */}
+              {showUserDropdown && currentUser && (
+                <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-zinc-200 py-2 z-50 text-xs animate-in fade-in zoom-in-95 duration-150">
+                  <div className="px-4 py-3 border-b border-zinc-100 bg-zinc-50/60 rounded-t-2xl">
+                    <div className="flex items-center space-x-2.5">
+                      {currentUser.photoURL ? (
+                        <img 
+                          src={currentUser.photoURL} 
+                          alt="User" 
+                          className="w-9 h-9 rounded-full border border-zinc-200 object-cover" 
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <div className="w-9 h-9 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center">
+                          {(currentUser.displayName || 'U')[0].toUpperCase()}
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <p className="font-bold text-zinc-900 truncate">{currentUser.displayName || 'Pengguna'}</p>
+                        <p className="text-[11px] text-blue-700 font-semibold truncate">{currentUser.role || 'Wali Kelas'}</p>
+                        <p className="text-[10px] text-zinc-500 truncate">{currentUser.email}</p>
+                      </div>
+                    </div>
                   </div>
-                  <div className="p-1">
+
+                  <div className="p-1.5 space-y-1">
+                    <button
+                      onClick={() => {
+                        setShowUserDropdown(false);
+                        setIsLoginModalOpen(true);
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-zinc-700 hover:bg-blue-50 hover:text-blue-700 rounded-xl transition cursor-pointer text-left font-semibold"
+                    >
+                      <Sparkles className="w-4 h-4 text-blue-600" />
+                      <span>Ganti / Tambah Akun</span>
+                    </button>
+
                     <button
                       onClick={() => {
                         logoutUser();
                         setShowUserDropdown(false);
                       }}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer text-left"
+                      className="w-full flex items-center gap-2 px-3 py-2 text-rose-600 hover:bg-rose-50 rounded-xl transition cursor-pointer text-left font-semibold"
                     >
-                      <LogOut className="w-3.5 h-3.5" />
+                      <LogOut className="w-4 h-4" />
                       <span>Keluar (Logout)</span>
                     </button>
                   </div>

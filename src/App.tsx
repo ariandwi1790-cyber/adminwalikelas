@@ -17,10 +17,11 @@ import { AchievementsManager } from './components/achievements/AchievementsManag
 import { ParentCommManager } from './components/communication/ParentCommManager';
 import { ReportsCenter } from './components/reports/ReportsCenter';
 import { SettingsManager } from './components/settings/SettingsManager';
-import { CheckCircle2, AlertCircle, Info, RefreshCw, X } from 'lucide-react';
+import { ToastNotification } from './components/common/ToastNotification';
+import { LoginModal } from './components/auth/LoginModal';
 
 const MainAppContent: React.FC = () => {
-  const { allStudentsFullData, db, toast, clearToast } = useDatabase();
+  const { allStudentsFullData, db, toast, clearToast, isLoginModalOpen, setIsLoginModalOpen } = useDatabase();
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
 
@@ -111,33 +112,14 @@ const MainAppContent: React.FC = () => {
         studentCount={allStudentsFullData.length}
       />
 
-      {/* Global Cloud Toast Notification */}
-      {toast && (
-        <div className="fixed bottom-16 lg:bottom-6 right-4 z-50 animate-in slide-in-from-bottom duration-200">
-          <div className={`flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg border text-xs font-semibold max-w-md ${
-            toast.type === 'success' 
-              ? 'bg-emerald-900 text-emerald-50 border-emerald-700' 
-              : toast.type === 'error' 
-              ? 'bg-rose-900 text-rose-50 border-rose-700' 
-              : toast.type === 'loading'
-              ? 'bg-blue-900 text-blue-50 border-blue-700'
-              : 'bg-zinc-900 text-zinc-100 border-zinc-700'
-          }`}>
-            {toast.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />}
-            {toast.type === 'error' && <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />}
-            {toast.type === 'loading' && <RefreshCw className="w-4 h-4 text-blue-400 flex-shrink-0 animate-spin" />}
-            {toast.type === 'info' && <Info className="w-4 h-4 text-blue-400 flex-shrink-0" />}
-            <span className="flex-1">{toast.text}</span>
-            <button 
-              onClick={clearToast}
-              className="p-1 hover:bg-white/20 rounded cursor-pointer transition text-white/80 hover:text-white"
-              aria-label="Tutup notifikasi"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Global Cloud Toast Notification with Auto-Dismiss & Countdown */}
+      <ToastNotification toast={toast} onClose={clearToast} />
+
+      {/* Multi-Account Login / Switcher Modal */}
+      <LoginModal 
+        isOpen={isLoginModalOpen} 
+        onClose={() => setIsLoginModalOpen(false)} 
+      />
 
       {/* Global Modals */}
       {viewingStudentId && (

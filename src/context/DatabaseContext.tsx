@@ -17,8 +17,14 @@ import {
   StudentPotential, 
   ParentCommunication, 
   SchoolSettings,
+  DisciplineFactorWeights,
+  EarlyWarningThresholds,
+  DisciplineSettings,
+  EarlyWarningSettings,
   StudentFullData,
-  PeriodicEvaluation
+  PeriodicEvaluation,
+  AppAccount,
+  AppUser
 } from '../types';
 import { 
   loadDatabase as loadLocalCache, 
@@ -28,7 +34,15 @@ import {
   getAllStudentsFullData 
 } from '../db/storage';
 import { generateNextStudentId } from '../utils/calculations';
-import { auth, googleSignIn, logoutGoogle, testFirestoreConnection } from '../services/firebase';
+import { 
+  auth, 
+  googleSignIn, 
+  logoutGoogle, 
+  emailSignIn, 
+  emailSignUp, 
+  PRESET_ACCOUNTS, 
+  testFirestoreConnection 
+} from '../services/firebase';
 import { 
   COLLECTIONS,
   setFirestoreDocument, 
@@ -46,7 +60,7 @@ import {
 } from '../services/firestoreService';
 import { INITIAL_SEED_DATA } from '../db/seedData';
 
-interface ToastInfo {
+export interface ToastInfo {
   type: 'success' | 'error' | 'info' | 'loading';
   text: string;
   timestamp: number;
@@ -64,7 +78,7 @@ interface DatabaseContextType {
   getStudentById: (studentId: string) => StudentFullData | null;
 
   // Auth & Cloud Sync Status
-  currentUser: User | null;
+  currentUser: AppUser | null;
   isAuthenticated: boolean;
   isAuthLoading: boolean;
   isFirestoreConnected: boolean;
@@ -75,6 +89,11 @@ interface DatabaseContextType {
   toast: ToastInfo | null;
   showToast: (type: 'success' | 'error' | 'info' | 'loading', text: string, durationMs?: number) => void;
   clearToast: () => void;
+  isLoginModalOpen: boolean;
+  setIsLoginModalOpen: (open: boolean) => void;
+  loginWithPreset: (account: AppAccount) => Promise<void>;
+  loginWithEmail: (email: string, pass: string) => Promise<void>;
+  registerWithEmail: (email: string, pass: string, name: string, role: string, nip?: string) => Promise<void>;
   loginGoogleUser: () => Promise<void>;
   logoutUser: () => Promise<void>;
 
@@ -186,15 +205,31 @@ export const DatabaseProvider: React.FC<{ children: ReactNode }> = ({ children }
   );
 
   // Auth & Cloud State
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
+  const [currentUser, setCurrentUser] = useState<AppUser | null>(() => {
+    try {
+      const savedUser = localStorage.getItem('wali_active_user');
+      if (savedUser) return JSON.parse(savedUser);
+    } catch (e) {}
+    // Default initial user for seamless out-of-the-box experience
+    return {
+      uid: 'preset-wali-1',
+      displayName: 'Ahmad Subari, S.Pd',
+      email: 'ahmad.subari@smkn1.sch.id',
+      role: 'Wali Kelas X TKR B',
+      nip: '19850315 201001 1 012',
+      photoURL: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+      isPreset: true
+    };
+  });
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
+  const [isAuthLoading, setIsAuthLoading] = useState<boolean>(false);
   const [isFirestoreConnected, setIsFirestoreConnected] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [isOffline, setIsOffline] = useState<boolean>(!navigator.onLine);
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
   const [syncErrorMessage, setSyncErrorMessage] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastInfo | null>(null);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
 
   // Migration status
   const [localDataAvailableForMigration, setLocalDataAvailableForMigration] = useState<boolean>(false);
@@ -202,17 +237,20 @@ export const DatabaseProvider: React.FC<{ children: ReactNode }> = ({ children }
 
   const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const showToast = useCallback((type: 'success' | 'error' | 'info' | 'loading', text: string, durationMs: number = 4000) => {
+  const showToast = useCallback((type: 'success' | 'error' | 'info' | 'loading', text: string, durationMs?: number) => {
     if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
     setToast({ type, text, timestamp: Date.now() });
-    if (type !== 'loading') {
-      toastTimeoutRef.current = setTimeout(() => {
-        setToast(null);
-      }, durationMs);
-    }
+
+    // Duration: 1500ms default for success, 2500ms for error, 2000ms max safety timeout for loading
+    const actualDuration = durationMs ?? (type === 'error' ? 2500 : type === 'loading' ? 2000 : 1500);
+
+    toastTimeoutRef.current = setTimeout(() => {
+      setToast(null);
+    }, actualDuration);
   }, []);
 
   const clearToast = useCallback(() => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
     setToast(null);
   }, []);
 
@@ -220,11 +258,11 @@ export const DatabaseProvider: React.FC<{ children: ReactNode }> = ({ children }
   useEffect(() => {
     const handleOnline = () => {
       setIsOffline(false);
-      showToast('info', 'Koneksi internet pulih. Menyinkronkan ke Firestore...');
+      showToast('info', 'Koneksi internet pulih. Menyinkronkan ke Firestore...', 1500);
     };
     const handleOffline = () => {
       setIsOffline(true);
-      showToast('info', 'Anda sedang offline. Perubahan disimpan di cache lokal.');
+      showToast('info', 'Anda sedang offline. Perubahan disimpan di cache lokal.', 1500);
     };
 
     window.addEventListener('online', handleOnline);
@@ -236,15 +274,23 @@ export const DatabaseProvider: React.FC<{ children: ReactNode }> = ({ children }
     };
   }, [showToast]);
 
-  // Auth state listener
+  // Auth state listener for Firebase
   useEffect(() => {
-    const unsubscribeAuth = auth.onAuthStateChanged(async (user) => {
-      setCurrentUser(user);
-      setIsAuthenticated(!!user);
-      setIsAuthLoading(false);
-
-      if (user) {
+    const unsubscribeAuth = auth.onAuthStateChanged(async (firebaseUser) => {
+      if (firebaseUser) {
+        const appUser: AppUser = {
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Guru',
+          photoURL: firebaseUser.photoURL,
+          role: 'Pengguna Terverifikasi',
+          isPreset: false
+        };
+        setCurrentUser(appUser);
+        setIsAuthenticated(true);
+        localStorage.setItem('wali_active_user', JSON.stringify(appUser));
         setIsFirestoreConnected(true);
+        
         // Check if Firestore is empty to seed or offer migration
         try {
           const hasData = await isFirestoreInitialized();
@@ -253,12 +299,11 @@ export const DatabaseProvider: React.FC<{ children: ReactNode }> = ({ children }
             if (localDb.students && localDb.students.length > 0) {
               setLocalDataAvailableForMigration(true);
               setLocalDataCount(localDb.students.length);
-              // Auto-seed to Firestore initially so the user has immediate working data in Firestore
               setIsSyncing(true);
               await saveFullDatabaseToFirestore(localDb);
               setIsSyncing(false);
               setLastSyncTime(new Date().toLocaleTimeString());
-              showToast('success', 'Data database berhasil disinkronkan ke Cloud Firestore.');
+              showToast('success', 'Data database berhasil disinkronkan ke Cloud Firestore.', 1500);
             } else {
               setIsSyncing(true);
               await saveFullDatabaseToFirestore(INITIAL_SEED_DATA);
@@ -269,9 +314,8 @@ export const DatabaseProvider: React.FC<{ children: ReactNode }> = ({ children }
         } catch (err: any) {
           console.warn('Initial Firestore sync check error:', err);
         }
-      } else {
-        setIsFirestoreConnected(false);
       }
+      setIsAuthLoading(false);
     });
 
     return () => unsubscribeAuth();
@@ -307,15 +351,89 @@ export const DatabaseProvider: React.FC<{ children: ReactNode }> = ({ children }
     };
   }, [isAuthenticated]);
 
+  const loginWithPreset = async (account: AppAccount) => {
+    const appUser: AppUser = {
+      uid: account.uid,
+      email: account.email,
+      displayName: account.displayName,
+      role: account.role,
+      nip: account.nip,
+      photoURL: account.avatarUrl,
+      isPreset: true
+    };
+    setCurrentUser(appUser);
+    setIsAuthenticated(true);
+    localStorage.setItem('wali_active_user', JSON.stringify(appUser));
+    
+    if (account.classAssigned) {
+      setSelectedClassId(account.classAssigned);
+    }
+    showToast('success', `Berhasil masuk sebagai ${account.displayName} (${account.role})`, 1500);
+  };
+
+  const loginWithEmail = async (email: string, pass: string) => {
+    try {
+      showToast('loading', 'Memverifikasi akun...', 1500);
+      const user = await emailSignIn(email, pass);
+      const appUser: AppUser = {
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName || user.email?.split('@')[0] || 'Guru',
+        photoURL: user.photoURL,
+        role: 'Guru Terdaftar',
+        isPreset: false
+      };
+      setCurrentUser(appUser);
+      setIsAuthenticated(true);
+      localStorage.setItem('wali_active_user', JSON.stringify(appUser));
+      showToast('success', `Selamat datang, ${appUser.displayName}!`, 1500);
+    } catch (err: any) {
+      showToast('error', `Gagal masuk: ${err.message || 'Periksa email & password'}`, 2500);
+      throw err;
+    }
+  };
+
+  const registerWithEmail = async (email: string, pass: string, name: string, role: string, nip?: string) => {
+    try {
+      showToast('loading', 'Mendaftarkan akun baru...', 1500);
+      const user = await emailSignUp(email, pass, name);
+      const appUser: AppUser = {
+        uid: user.uid,
+        email: user.email,
+        displayName: name,
+        role: role || 'Wali Kelas',
+        nip: nip,
+        photoURL: user.photoURL,
+        isPreset: false
+      };
+      setCurrentUser(appUser);
+      setIsAuthenticated(true);
+      localStorage.setItem('wali_active_user', JSON.stringify(appUser));
+      showToast('success', `Akun ${name} berhasil didaftarkan!`, 1500);
+    } catch (err: any) {
+      showToast('error', `Gagal pendaftaran: ${err.message}`, 2500);
+      throw err;
+    }
+  };
+
   const loginGoogleUser = async () => {
     try {
-      showToast('loading', 'Menghubungkan ke Akun Google...');
+      showToast('loading', 'Menghubungkan ke Akun Google...', 1500);
       const { user } = await googleSignIn();
-      setCurrentUser(user);
+      const appUser: AppUser = {
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName || user.email?.split('@')[0] || 'Guru',
+        photoURL: user.photoURL,
+        role: 'Google Workspace User',
+        isPreset: false
+      };
+      setCurrentUser(appUser);
       setIsAuthenticated(true);
-      showToast('success', `Berhasil login sebagai ${user.displayName || user.email}`);
+      localStorage.setItem('wali_active_user', JSON.stringify(appUser));
+      showToast('success', `Berhasil login sebagai ${appUser.displayName}`, 1500);
     } catch (err: any) {
-      showToast('error', `Gagal login Google: ${err.message || 'Terjadi kesalahan'}`);
+      showToast('error', `Gagal login Google: ${err.message || 'Terjadi kesalahan'}`, 2500);
     }
   };
 
@@ -324,9 +442,10 @@ export const DatabaseProvider: React.FC<{ children: ReactNode }> = ({ children }
       await logoutGoogle();
       setCurrentUser(null);
       setIsAuthenticated(false);
-      showToast('info', 'Anda telah keluar dari akun Google.');
+      localStorage.removeItem('wali_active_user');
+      showToast('info', 'Anda telah keluar dari akun.', 1500);
     } catch (err: any) {
-      showToast('error', `Gagal logout: ${err.message}`);
+      showToast('error', `Gagal logout: ${err.message}`, 2000);
     }
   };
 
@@ -588,80 +707,80 @@ export const DatabaseProvider: React.FC<{ children: ReactNode }> = ({ children }
   const deleteMultipleStudents = useCallback(async (studentIds: string[]) => {
     if (!studentIds.length) return;
     const targetSet = new Set(studentIds);
+    let ops: { type: 'delete'; collection: string; docId: string }[] = [];
 
-    // Collect related documents to delete from Firestore
-    const ops: { type: 'delete'; collection: string; docId: string }[] = [];
-    studentIds.forEach(id => {
-      ops.push({ type: 'delete', collection: COLLECTIONS.STUDENTS, docId: id });
+    setDb(prev => {
+      ops = [];
+      studentIds.forEach(id => {
+        ops.push({ type: 'delete', collection: COLLECTIONS.STUDENTS, docId: id });
+      });
+
+      prev.addresses.filter(a => targetSet.has(a.student_id)).forEach(a => {
+        ops.push({ type: 'delete', collection: COLLECTIONS.ADDRESSES, docId: a.address_id });
+      });
+      prev.parents.filter(p => targetSet.has(p.student_id)).forEach(p => {
+        ops.push({ type: 'delete', collection: COLLECTIONS.PARENTS, docId: p.parent_id });
+      });
+      prev.student_class_history.filter(h => targetSet.has(h.student_id)).forEach(h => {
+        ops.push({ type: 'delete', collection: COLLECTIONS.STUDENT_CLASS_HISTORY, docId: h.history_id });
+      });
+      prev.attendance.filter(att => targetSet.has(att.student_id)).forEach(att => {
+        ops.push({ type: 'delete', collection: COLLECTIONS.ATTENDANCE, docId: att.attendance_id });
+      });
+      prev.violations.filter(v => targetSet.has(v.student_id)).forEach(v => {
+        ops.push({ type: 'delete', collection: COLLECTIONS.VIOLATIONS, docId: v.violation_id });
+      });
+      prev.guidance.filter(g => targetSet.has(g.student_id)).forEach(g => {
+        ops.push({ type: 'delete', collection: COLLECTIONS.GUIDANCE, docId: g.guidance_id });
+      });
+      prev.home_visits.filter(hv => targetSet.has(hv.student_id)).forEach(hv => {
+        ops.push({ type: 'delete', collection: COLLECTIONS.HOME_VISITS, docId: hv.visit_id });
+      });
+      prev.student_notes.filter(n => targetSet.has(n.student_id)).forEach(n => {
+        ops.push({ type: 'delete', collection: COLLECTIONS.STUDENT_NOTES, docId: n.note_id });
+      });
+      prev.achievements.filter(ach => targetSet.has(ach.student_id)).forEach(ach => {
+        ops.push({ type: 'delete', collection: COLLECTIONS.ACHIEVEMENTS, docId: ach.achievement_id });
+      });
+      prev.potentials.filter(pot => targetSet.has(pot.student_id)).forEach(pot => {
+        ops.push({ type: 'delete', collection: COLLECTIONS.POTENTIALS, docId: pot.potential_id });
+      });
+      prev.parent_communications.filter(c => targetSet.has(c.student_id)).forEach(c => {
+        ops.push({ type: 'delete', collection: COLLECTIONS.PARENT_COMMUNICATIONS, docId: c.comm_id });
+      });
+      prev.evaluations?.filter(e => targetSet.has(e.student_id)).forEach(e => {
+        ops.push({ type: 'delete', collection: COLLECTIONS.EVALUATIONS, docId: e.evaluation_id });
+      });
+
+      const updatedDb: AppDatabase = {
+        ...prev,
+        students: prev.students.filter(s => !targetSet.has(s.student_id)),
+        addresses: prev.addresses.filter(a => !targetSet.has(a.student_id)),
+        parents: prev.parents.filter(p => !targetSet.has(p.student_id)),
+        student_class_history: prev.student_class_history.filter(h => !targetSet.has(h.student_id)),
+        attendance: prev.attendance.filter(att => !targetSet.has(att.student_id)),
+        violations: prev.violations.filter(v => !targetSet.has(v.student_id)),
+        guidance: prev.guidance.filter(g => !targetSet.has(g.student_id)),
+        home_visits: prev.home_visits.filter(hv => !targetSet.has(hv.student_id)),
+        student_notes: prev.student_notes.filter(n => !targetSet.has(n.student_id)),
+        achievements: prev.achievements.filter(ach => !targetSet.has(ach.student_id)),
+        potentials: prev.potentials.filter(pot => !targetSet.has(pot.student_id)),
+        parent_communications: prev.parent_communications.filter(c => !targetSet.has(c.student_id)),
+        evaluations: prev.evaluations?.filter(e => !targetSet.has(e.student_id)) || [],
+      };
+      saveLocalCache(updatedDb);
+      return updatedDb;
     });
 
-    db.addresses.filter(a => targetSet.has(a.student_id)).forEach(a => {
-      ops.push({ type: 'delete', collection: COLLECTIONS.ADDRESSES, docId: a.address_id });
-    });
-    db.parents.filter(p => targetSet.has(p.student_id)).forEach(p => {
-      ops.push({ type: 'delete', collection: COLLECTIONS.PARENTS, docId: p.parent_id });
-    });
-    db.student_class_history.filter(h => targetSet.has(h.student_id)).forEach(h => {
-      ops.push({ type: 'delete', collection: COLLECTIONS.STUDENT_CLASS_HISTORY, docId: h.history_id });
-    });
-    db.attendance.filter(att => targetSet.has(att.student_id)).forEach(att => {
-      ops.push({ type: 'delete', collection: COLLECTIONS.ATTENDANCE, docId: att.attendance_id });
-    });
-    db.violations.filter(v => targetSet.has(v.student_id)).forEach(v => {
-      ops.push({ type: 'delete', collection: COLLECTIONS.VIOLATIONS, docId: v.violation_id });
-    });
-    db.guidance.filter(g => targetSet.has(g.student_id)).forEach(g => {
-      ops.push({ type: 'delete', collection: COLLECTIONS.GUIDANCE, docId: g.guidance_id });
-    });
-    db.home_visits.filter(hv => targetSet.has(hv.student_id)).forEach(hv => {
-      ops.push({ type: 'delete', collection: COLLECTIONS.HOME_VISITS, docId: hv.visit_id });
-    });
-    db.student_notes.filter(n => targetSet.has(n.student_id)).forEach(n => {
-      ops.push({ type: 'delete', collection: COLLECTIONS.STUDENT_NOTES, docId: n.note_id });
-    });
-    db.achievements.filter(ach => targetSet.has(ach.student_id)).forEach(ach => {
-      ops.push({ type: 'delete', collection: COLLECTIONS.ACHIEVEMENTS, docId: ach.achievement_id });
-    });
-    db.potentials.filter(pot => targetSet.has(pot.student_id)).forEach(pot => {
-      ops.push({ type: 'delete', collection: COLLECTIONS.POTENTIALS, docId: pot.potential_id });
-    });
-    db.parent_communications.filter(c => targetSet.has(c.student_id)).forEach(c => {
-      ops.push({ type: 'delete', collection: COLLECTIONS.PARENT_COMMUNICATIONS, docId: c.comm_id });
-    });
-    db.evaluations?.filter(e => targetSet.has(e.student_id)).forEach(e => {
-      ops.push({ type: 'delete', collection: COLLECTIONS.EVALUATIONS, docId: e.evaluation_id });
-    });
-
-    const updatedDb: AppDatabase = {
-      ...db,
-      students: db.students.filter(s => !targetSet.has(s.student_id)),
-      addresses: db.addresses.filter(a => !targetSet.has(a.student_id)),
-      parents: db.parents.filter(p => !targetSet.has(p.student_id)),
-      student_class_history: db.student_class_history.filter(h => !targetSet.has(h.student_id)),
-      attendance: db.attendance.filter(att => !targetSet.has(att.student_id)),
-      violations: db.violations.filter(v => !targetSet.has(v.student_id)),
-      guidance: db.guidance.filter(g => !targetSet.has(g.student_id)),
-      home_visits: db.home_visits.filter(hv => !targetSet.has(hv.student_id)),
-      student_notes: db.student_notes.filter(n => !targetSet.has(n.student_id)),
-      achievements: db.achievements.filter(ach => !targetSet.has(ach.student_id)),
-      potentials: db.potentials.filter(pot => !targetSet.has(pot.student_id)),
-      parent_communications: db.parent_communications.filter(c => !targetSet.has(c.student_id)),
-      evaluations: db.evaluations?.filter(e => !targetSet.has(e.student_id)) || [],
-    };
-    setDb(updatedDb);
-    saveLocalCache(updatedDb);
-
-    if (isAuthenticated && auth.currentUser) {
+    if (ops.length > 0) {
       try {
         await batchWriteFirestore(ops);
-        showToast('success', `${studentIds.length} data siswa berhasil dihapus dari cloud.`);
       } catch (err: any) {
-        showToast('error', `Gagal menghapus dari Firestore: ${err.message}`);
+        console.warn('Background firestore delete sync error:', err);
       }
-    } else {
-      showToast('success', `${studentIds.length} data siswa berhasil dihapus.`);
     }
-  }, [db, isAuthenticated, showToast]);
+    showToast('success', `${studentIds.length} data siswa berhasil dihapus.`, 1500);
+  }, [showToast]);
 
   const deleteStudent = useCallback(async (studentId: string) => {
     return deleteMultipleStudents([studentId]);
@@ -913,21 +1032,23 @@ export const DatabaseProvider: React.FC<{ children: ReactNode }> = ({ children }
   }, [db, showToast]);
 
   const deleteViolation = useCallback(async (violationId: string) => {
-    const updatedDb: AppDatabase = {
-      ...db,
-      violations: db.violations.filter(v => v.violation_id !== violationId),
-      guidance: db.guidance.filter(g => g.violation_id !== violationId),
-    };
-    setDb(updatedDb);
-    saveLocalCache(updatedDb);
+    setDb(prev => {
+      const updatedDb: AppDatabase = {
+        ...prev,
+        violations: prev.violations.filter(v => v.violation_id !== violationId),
+        guidance: prev.guidance.filter(g => g.violation_id !== violationId),
+      };
+      saveLocalCache(updatedDb);
+      return updatedDb;
+    });
 
     try {
       await deleteFirestoreDocument(COLLECTIONS.VIOLATIONS, violationId);
-      showToast('success', 'Data pelanggaran berhasil dihapus.');
+      showToast('success', 'Data pelanggaran berhasil dihapus.', 1500);
     } catch (err: any) {
-      showToast('error', `Gagal menghapus pelanggaran: ${err.message}`);
+      showToast('error', `Gagal menghapus pelanggaran: ${err.message}`, 2500);
     }
-  }, [db, showToast]);
+  }, [showToast]);
 
   const addGuidance = useCallback(async (guidance: Omit<GuidanceRecord, 'guidance_id' | 'created_at'>): Promise<GuidanceRecord> => {
     const newGuid: GuidanceRecord = {
@@ -944,9 +1065,9 @@ export const DatabaseProvider: React.FC<{ children: ReactNode }> = ({ children }
 
     try {
       await setFirestoreDocument(COLLECTIONS.GUIDANCE, newGuid.guidance_id, newGuid);
-      showToast('success', 'Catatan pembinaan berhasil disimpan di cloud.');
+      showToast('success', 'Catatan pembinaan berhasil disimpan di cloud.', 1500);
     } catch (err: any) {
-      showToast('error', `Gagal menyimpan pembinaan: ${err.message}`);
+      showToast('error', `Gagal menyimpan pembinaan: ${err.message}`, 2500);
     }
     return newGuid;
   }, [db, showToast]);
@@ -964,27 +1085,29 @@ export const DatabaseProvider: React.FC<{ children: ReactNode }> = ({ children }
 
     try {
       await setFirestoreDocument(COLLECTIONS.GUIDANCE, guidanceId, updated);
-      showToast('success', 'Pembinaan berhasil diperbarui.');
+      showToast('success', 'Pembinaan berhasil diperbarui.', 1500);
     } catch (err: any) {
-      showToast('error', `Gagal update pembinaan: ${err.message}`);
+      showToast('error', `Gagal update pembinaan: ${err.message}`, 2500);
     }
   }, [db, showToast]);
 
   const deleteGuidance = useCallback(async (guidanceId: string) => {
-    const updatedDb: AppDatabase = {
-      ...db,
-      guidance: db.guidance.filter(g => g.guidance_id !== guidanceId),
-    };
-    setDb(updatedDb);
-    saveLocalCache(updatedDb);
+    setDb(prev => {
+      const updatedDb: AppDatabase = {
+        ...prev,
+        guidance: prev.guidance.filter(g => g.guidance_id !== guidanceId),
+      };
+      saveLocalCache(updatedDb);
+      return updatedDb;
+    });
 
     try {
       await deleteFirestoreDocument(COLLECTIONS.GUIDANCE, guidanceId);
-      showToast('success', 'Pembinaan berhasil dihapus.');
+      showToast('success', 'Pembinaan berhasil dihapus.', 1500);
     } catch (err: any) {
-      showToast('error', `Gagal menghapus pembinaan: ${err.message}`);
+      showToast('error', `Gagal menghapus pembinaan: ${err.message}`, 2500);
     }
-  }, [db, showToast]);
+  }, [showToast]);
 
   // Home Visits
   const addHomeVisit = useCallback(async (hv: Omit<HomeVisitRecord, 'visit_id' | 'created_at'>): Promise<HomeVisitRecord> => {
@@ -1002,9 +1125,9 @@ export const DatabaseProvider: React.FC<{ children: ReactNode }> = ({ children }
 
     try {
       await setFirestoreDocument(COLLECTIONS.HOME_VISITS, newHv.visit_id, newHv);
-      showToast('success', 'Home Visit berhasil disimpan di cloud.');
+      showToast('success', 'Home Visit berhasil disimpan di cloud.', 1500);
     } catch (err: any) {
-      showToast('error', `Gagal menyimpan home visit: ${err.message}`);
+      showToast('error', `Gagal menyimpan home visit: ${err.message}`, 2500);
     }
     return newHv;
   }, [db, showToast]);
@@ -1022,27 +1145,29 @@ export const DatabaseProvider: React.FC<{ children: ReactNode }> = ({ children }
 
     try {
       await setFirestoreDocument(COLLECTIONS.HOME_VISITS, visitId, updated);
-      showToast('success', 'Home Visit berhasil diperbarui.');
+      showToast('success', 'Home Visit berhasil diperbarui.', 1500);
     } catch (err: any) {
-      showToast('error', `Gagal update home visit: ${err.message}`);
+      showToast('error', `Gagal update home visit: ${err.message}`, 2500);
     }
   }, [db, showToast]);
 
   const deleteHomeVisit = useCallback(async (visitId: string) => {
-    const updatedDb: AppDatabase = {
-      ...db,
-      home_visits: db.home_visits.filter(hv => hv.visit_id !== visitId),
-    };
-    setDb(updatedDb);
-    saveLocalCache(updatedDb);
+    setDb(prev => {
+      const updatedDb: AppDatabase = {
+        ...prev,
+        home_visits: prev.home_visits.filter(hv => hv.visit_id !== visitId),
+      };
+      saveLocalCache(updatedDb);
+      return updatedDb;
+    });
 
     try {
       await deleteFirestoreDocument(COLLECTIONS.HOME_VISITS, visitId);
-      showToast('success', 'Home Visit berhasil dihapus.');
+      showToast('success', 'Home Visit berhasil dihapus.', 1500);
     } catch (err: any) {
-      showToast('error', `Gagal menghapus home visit: ${err.message}`);
+      showToast('error', `Gagal menghapus home visit: ${err.message}`, 2500);
     }
-  }, [db, showToast]);
+  }, [showToast]);
 
   // Notes
   const addStudentNote = useCallback(async (note: Omit<StudentNote, 'note_id' | 'created_at'>): Promise<StudentNote> => {
@@ -1060,28 +1185,30 @@ export const DatabaseProvider: React.FC<{ children: ReactNode }> = ({ children }
 
     try {
       await setFirestoreDocument(COLLECTIONS.STUDENT_NOTES, newNote.note_id, newNote);
-      showToast('success', 'Catatan siswa berhasil disimpan di cloud.');
+      showToast('success', 'Catatan siswa berhasil disimpan di cloud.', 1500);
     } catch (err: any) {
-      showToast('error', `Gagal menyimpan catatan: ${err.message}`);
+      showToast('error', `Gagal menyimpan catatan: ${err.message}`, 2500);
     }
     return newNote;
   }, [db, showToast]);
 
   const deleteStudentNote = useCallback(async (noteId: string) => {
-    const updatedDb: AppDatabase = {
-      ...db,
-      student_notes: db.student_notes.filter(n => n.note_id !== noteId),
-    };
-    setDb(updatedDb);
-    saveLocalCache(updatedDb);
+    setDb(prev => {
+      const updatedDb: AppDatabase = {
+        ...prev,
+        student_notes: prev.student_notes.filter(n => n.note_id !== noteId),
+      };
+      saveLocalCache(updatedDb);
+      return updatedDb;
+    });
 
     try {
       await deleteFirestoreDocument(COLLECTIONS.STUDENT_NOTES, noteId);
-      showToast('success', 'Catatan siswa berhasil dihapus.');
+      showToast('success', 'Catatan siswa berhasil dihapus.', 1500);
     } catch (err: any) {
-      showToast('error', `Gagal menghapus catatan: ${err.message}`);
+      showToast('error', `Gagal menghapus catatan: ${err.message}`, 2500);
     }
-  }, [db, showToast]);
+  }, [showToast]);
 
   // Achievements & Potential
   const addAchievement = useCallback(async (ach: Omit<AchievementRecord, 'achievement_id' | 'created_at'>): Promise<AchievementRecord> => {
@@ -1099,9 +1226,9 @@ export const DatabaseProvider: React.FC<{ children: ReactNode }> = ({ children }
 
     try {
       await setFirestoreDocument(COLLECTIONS.ACHIEVEMENTS, newAch.achievement_id, newAch);
-      showToast('success', 'Prestasi siswa berhasil disimpan.');
+      showToast('success', 'Prestasi siswa berhasil disimpan.', 1500);
     } catch (err: any) {
-      showToast('error', `Gagal menyimpan prestasi: ${err.message}`);
+      showToast('error', `Gagal menyimpan prestasi: ${err.message}`, 2500);
     }
     return newAch;
   }, [db, showToast]);
@@ -1119,13 +1246,12 @@ export const DatabaseProvider: React.FC<{ children: ReactNode }> = ({ children }
 
     try {
       await deleteFirestoreDocument(COLLECTIONS.ACHIEVEMENTS, achId);
-      showToast('success', 'Prestasi siswa berhasil dihapus.');
+      showToast('success', 'Prestasi siswa berhasil dihapus.', 1500);
     } catch (err: any) {
       console.error('[DatabaseContext] deleteAchievement error:', err);
-      // Revert if failed
       const cached = loadLocalCache();
       setDb(cached);
-      showToast('error', `Gagal menghapus prestasi: ${err.message || 'Terjadi kesalahan'}`);
+      showToast('error', `Gagal menghapus prestasi: ${err.message || 'Terjadi kesalahan'}`, 2500);
       throw err;
     }
   }, [showToast]);
@@ -1228,41 +1354,108 @@ export const DatabaseProvider: React.FC<{ children: ReactNode }> = ({ children }
   }, [db, showToast]);
 
   const deleteParentComm = useCallback(async (commId: string) => {
-    const updatedDb: AppDatabase = {
-      ...db,
-      parent_communications: db.parent_communications.filter(c => c.comm_id !== commId),
-    };
-    setDb(updatedDb);
-    saveLocalCache(updatedDb);
+    setDb(prev => {
+      const updatedDb: AppDatabase = {
+        ...prev,
+        parent_communications: prev.parent_communications.filter(c => c.comm_id !== commId),
+      };
+      saveLocalCache(updatedDb);
+      return updatedDb;
+    });
 
     try {
       await deleteFirestoreDocument(COLLECTIONS.PARENT_COMMUNICATIONS, commId);
-      showToast('success', 'Log komunikasi berhasil dihapus.');
+      showToast('success', 'Log komunikasi berhasil dihapus.', 1500);
     } catch (err: any) {
-      showToast('error', `Gagal menghapus komunikasi: ${err.message}`);
+      showToast('error', `Gagal menghapus komunikasi: ${err.message}`, 2500);
     }
-  }, [db, showToast]);
+  }, [showToast]);
 
   // Settings
   const updateSettings = useCallback(async (settings: Partial<SchoolSettings>) => {
-    const updatedSettings: SchoolSettings = {
-      ...db.school_settings,
-      ...settings,
-    };
-    const updatedDb: AppDatabase = {
-      ...db,
-      school_settings: updatedSettings,
-    };
-    setDb(updatedDb);
-    saveLocalCache(updatedDb);
+    let latestSettings: SchoolSettings | null = null;
 
-    try {
-      await setFirestoreDocument(COLLECTIONS.SCHOOL_SETTINGS, 'current', updatedSettings);
-      showToast('success', 'Pengaturan sekolah & bobot berhasil diperbarui di Firestore.');
-    } catch (err: any) {
-      showToast('error', `Gagal update pengaturan di cloud: ${err.message}`);
+    setDb(prev => {
+      const mergedWeights: DisciplineFactorWeights = {
+        attendance_weight: 30,
+        punctuality_weight: 20,
+        violation_weight: 25,
+        compliance_weight: 15,
+        responsibility_weight: 10,
+        ...(prev.school_settings?.discipline_weights || {}),
+        ...(settings.discipline_weights || {})
+      };
+
+      const mergedThresholds: EarlyWarningThresholds = {
+        min_attendance_rate: 80,
+        max_alpa_count: 3,
+        max_violation_points: 30,
+        ...(prev.school_settings?.early_warning_thresholds || {}),
+        ...(settings.early_warning_thresholds || {})
+      };
+
+      const disciplineSettings: DisciplineSettings = {
+        weight_attendance: mergedWeights.attendance_weight,
+        weight_punctuality: mergedWeights.punctuality_weight,
+        weight_violations: mergedWeights.violation_weight,
+        weight_compliance: mergedWeights.compliance_weight,
+        weight_responsibility: mergedWeights.responsibility_weight,
+      };
+
+      const earlyWarningSettings: EarlyWarningSettings = {
+        high_priority_attendance_threshold: mergedThresholds.min_attendance_rate,
+        high_priority_alpa_threshold: mergedThresholds.max_alpa_count,
+        warning_attendance_threshold: 90,
+        warning_late_threshold: 3,
+        warning_violation_threshold: 2,
+      };
+
+      const updatedSettings: SchoolSettings = {
+        ...(prev.school_settings || {
+          school_name: '',
+          npsn: '',
+          school_address: '',
+          school_city: '',
+          school_province: '',
+          school_phone: '',
+          school_email: '',
+          principal_name: '',
+          principal_nip: '',
+          homeroom_teacher_name: '',
+          homeroom_teacher_nip: '',
+          current_academic_year_id: 'ay-2026-2027',
+          current_class_id: 'cls-x-tkr-b',
+          discipline_settings: disciplineSettings,
+          early_warning_settings: earlyWarningSettings,
+          discipline_weights: mergedWeights,
+          early_warning_thresholds: mergedThresholds
+        }),
+        ...settings,
+        discipline_settings: settings.discipline_settings || disciplineSettings,
+        early_warning_settings: settings.early_warning_settings || earlyWarningSettings,
+        discipline_weights: mergedWeights,
+        early_warning_thresholds: mergedThresholds
+      };
+
+      latestSettings = updatedSettings;
+      const updatedDb: AppDatabase = {
+        ...prev,
+        school_settings: updatedSettings,
+      };
+      saveLocalCache(updatedDb);
+      return updatedDb;
+    });
+
+    if (latestSettings) {
+      try {
+        await setFirestoreDocument(COLLECTIONS.SCHOOL_SETTINGS, 'current', latestSettings);
+        showToast('success', 'Pengaturan sekolah & bobot berhasil disimpan.');
+      } catch (err: any) {
+        console.warn('Sync settings error to cloud:', err);
+        showToast('success', 'Pengaturan berhasil disimpan di cache lokal.');
+      }
     }
-  }, [db, showToast]);
+  }, [showToast]);
 
   // Batch Import with Firestore Batch
   const batchImportStudents = useCallback(async (
@@ -1637,6 +1830,11 @@ export const DatabaseProvider: React.FC<{ children: ReactNode }> = ({ children }
         toast,
         showToast,
         clearToast,
+        isLoginModalOpen,
+        setIsLoginModalOpen,
+        loginWithPreset,
+        loginWithEmail,
+        registerWithEmail,
         loginGoogleUser,
         logoutUser,
 

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useDatabase } from '../../context/DatabaseContext';
 import { SchoolSettings, DisciplineFactorWeights, EarlyWarningThresholds } from '../../types';
 import { 
@@ -41,13 +41,30 @@ export const SettingsManager: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'school' | 'academic' | 'weights' | 'backup'>('school');
 
   // School Settings State
-  const [schoolSettings, setSchoolSettings] = useState<SchoolSettings>({ ...db.school_settings });
+  const [schoolSettings, setSchoolSettings] = useState<SchoolSettings>(() => ({ ...db.school_settings }));
 
   // Weights State
-  const [weights, setWeights] = useState<DisciplineFactorWeights>({ ...db.school_settings.discipline_weights });
+  const [weights, setWeights] = useState<DisciplineFactorWeights>(() => ({ ...db.school_settings.discipline_weights }));
 
   // Warning Thresholds State
-  const [thresholds, setThresholds] = useState<EarlyWarningThresholds>({ ...db.school_settings.early_warning_thresholds });
+  const [thresholds, setThresholds] = useState<EarlyWarningThresholds>(() => ({ ...db.school_settings.early_warning_thresholds }));
+
+  // Synchronize state when db.school_settings updates (e.g. from cloud snapshot)
+  useEffect(() => {
+    if (db.school_settings) {
+      setSchoolSettings({ ...db.school_settings });
+      if (db.school_settings.discipline_weights) {
+        setWeights({ ...db.school_settings.discipline_weights });
+      }
+      if (db.school_settings.early_warning_thresholds) {
+        setThresholds({ ...db.school_settings.early_warning_thresholds });
+      }
+    }
+  }, [db.school_settings]);
+
+  // Loading states for Save buttons
+  const [isSavingSchool, setIsSavingSchool] = useState(false);
+  const [isSavingWeights, setIsSavingWeights] = useState(false);
 
   // Add Academic Year Form
   const [newYearName, setNewYearName] = useState('');
@@ -70,15 +87,25 @@ export const SettingsManager: React.FC = () => {
 
   const handleSaveSchoolSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    await updateSettings(schoolSettings);
+    setIsSavingSchool(true);
+    try {
+      await updateSettings(schoolSettings);
+    } finally {
+      setIsSavingSchool(false);
+    }
   };
 
   const handleSaveWeights = async (e: React.FormEvent) => {
     e.preventDefault();
-    await updateSettings({
-      discipline_weights: weights,
-      early_warning_thresholds: thresholds,
-    });
+    setIsSavingWeights(true);
+    try {
+      await updateSettings({
+        discipline_weights: weights,
+        early_warning_thresholds: thresholds,
+      });
+    } finally {
+      setIsSavingWeights(false);
+    }
   };
 
   const handleAddAcademicYear = async (e: React.FormEvent) => {
@@ -331,10 +358,11 @@ export const SettingsManager: React.FC = () => {
           <div className="pt-4 border-t border-zinc-200 flex justify-end">
             <button
               type="submit"
-              className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl flex items-center space-x-1.5 shadow-xs cursor-pointer min-h-[44px]"
+              disabled={isSavingSchool}
+              className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-bold rounded-xl flex items-center space-x-1.5 shadow-xs cursor-pointer min-h-[44px] transition"
             >
-              <Save className="w-4 h-4" />
-              <span>Simpan Identitas ke Cloud Firestore</span>
+              {isSavingSchool ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              <span>{isSavingSchool ? 'Menyimpan Pengaturan...' : 'Simpan Identitas ke Cloud Firestore'}</span>
             </button>
           </div>
         </form>
@@ -581,10 +609,11 @@ export const SettingsManager: React.FC = () => {
           <div className="pt-4 border-t border-zinc-200 flex justify-end">
             <button
               type="submit"
-              className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl flex items-center space-x-1.5 shadow-xs cursor-pointer min-h-[44px]"
+              disabled={isSavingWeights}
+              className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-bold rounded-xl flex items-center space-x-1.5 shadow-xs cursor-pointer min-h-[44px] transition"
             >
-              <Save className="w-4 h-4" />
-              <span>Simpan Parameter Disiplin & Alert ke Firestore</span>
+              {isSavingWeights ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              <span>{isSavingWeights ? 'Menyimpan Parameter...' : 'Simpan Parameter Disiplin & Alert ke Firestore'}</span>
             </button>
           </div>
         </form>

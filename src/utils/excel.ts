@@ -728,3 +728,63 @@ export function exportClassRecapExcel(
   XLSX.utils.book_append_sheet(wb, ws, `Rekap_${className.replace(/\s+/g, '_')}`);
   XLSX.writeFile(wb, `Rekap_Kelas_${className.replace(/\s+/g, '_')}_${academicYear.replace(/\//g, '-')}.xlsx`);
 }
+
+export function exportMonthlyAttendanceExcel(
+  summaries: {
+    student_id: string;
+    nis: string;
+    full_name: string;
+    hadir: number;
+    sakit: number;
+    izin: number;
+    alpa: number;
+    terlambat: number;
+    total_recorded: number;
+    attendance_percentage: number;
+  }[],
+  dailyRecords: {
+    date: string;
+    student_id: string;
+    full_name: string;
+    className: string;
+    status: string;
+    note: string;
+  }[],
+  className: string,
+  monthName: string,
+  year: number
+): void {
+  const wb = XLSX.utils.book_new();
+
+  // Sheet 1: Rekap Bulanan
+  const summaryRows = summaries.map((s, idx) => ({
+    'No': idx + 1,
+    'Student ID': s.student_id,
+    'Nama Siswa': s.full_name,
+    'Hadir': s.hadir,
+    'Sakit': s.sakit,
+    'Izin': s.izin,
+    'Alpa': s.alpa,
+    'Terlambat': s.terlambat,
+    'Total Hari Tercatat': s.total_recorded,
+    'Persentase Kehadiran': `${s.attendance_percentage}%`,
+  }));
+  const wsSummary = XLSX.utils.json_to_sheet(summaryRows);
+  XLSX.utils.book_append_sheet(wb, wsSummary, 'Rekap Bulanan');
+
+  // Sheet 2: Detail Harian
+  const detailRows = dailyRecords.map(r => ({
+    'Tanggal': r.date,
+    'Student ID': r.student_id,
+    'Nama Siswa': r.full_name,
+    'Kelas': r.className,
+    'Status': r.status,
+    'Catatan': r.note || '-',
+  }));
+  const wsDetail = XLSX.utils.json_to_sheet(detailRows);
+  XLSX.utils.book_append_sheet(wb, wsDetail, 'Detail Harian');
+
+  const fileName = `Rekap_Presensi_${className.replace(/\s+/g, '_')}_${monthName}_${year}.xlsx`;
+  XLSX.writeFile(wb, fileName);
+}
+

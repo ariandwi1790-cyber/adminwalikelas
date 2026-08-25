@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useDatabase } from '../../context/DatabaseContext';
 import { AchievementRecord, AchievementLevel } from '../../types';
 import { Trophy, Plus, Award, Trash2, X, Star, Sparkles } from 'lucide-react';
+import { ConfirmModal } from '../common/ConfirmModal';
 
 export const AchievementsManager: React.FC = () => {
   const { db, addAchievement, deleteAchievement, allStudentsFullData, activeAcademicYear } = useDatabase();
@@ -15,6 +16,9 @@ export const AchievementsManager: React.FC = () => {
   const [category, setCategory] = useState('Kejuruan / Vokasi');
   const [organizer, setOrganizer] = useState('');
   const [documentation, setDocumentation] = useState('');
+
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,12 +100,12 @@ export const AchievementsManager: React.FC = () => {
                   </div>
 
                   <button
-                    onClick={() => {
-                      if (window.confirm('Hapus data prestasi ini?')) {
-                        deleteAchievement(ach.achievement_id);
-                      }
-                    }}
+                    onClick={() => setDeleteTarget({
+                      id: ach.achievement_id,
+                      name: `Prestasi "${ach.title}" (${s?.full_name || ach.student_id})`
+                    })}
                     className="text-slate-400 hover:text-rose-600 p-1 cursor-pointer"
+                    title="Hapus Prestasi"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -258,6 +262,28 @@ export const AchievementsManager: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!deleteTarget}
+        title="Konfirmasi Hapus Prestasi"
+        message={`Apakah Anda yakin ingin menghapus catatan ${deleteTarget?.name}? Data yang dihapus tidak dapat dipulihkan.`}
+        confirmText="Ya, Hapus"
+        cancelText="Batal"
+        type="danger"
+        isProcessing={isDeleting}
+        onConfirm={async () => {
+          if (!deleteTarget) return;
+          setIsDeleting(true);
+          try {
+            await deleteAchievement(deleteTarget.id);
+          } finally {
+            setIsDeleting(false);
+            setDeleteTarget(null);
+          }
+        }}
+        onClose={() => !isDeleting && setDeleteTarget(null)}
+      />
     </div>
   );
 };

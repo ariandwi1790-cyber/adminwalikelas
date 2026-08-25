@@ -73,6 +73,7 @@ interface DatabaseContextType {
   lastSyncTime: string | null;
   syncErrorMessage: string | null;
   toast: ToastInfo | null;
+  showToast: (type: 'success' | 'error' | 'info' | 'loading', text: string, durationMs?: number) => void;
   clearToast: () => void;
   loginGoogleUser: () => Promise<void>;
   logoutUser: () => Promise<void>;
@@ -98,6 +99,7 @@ interface DatabaseContextType {
     potentialData?: Partial<StudentPotential>
   ) => Promise<void>;
   deleteStudent: (studentId: string) => Promise<void>;
+  deleteMultipleStudents: (studentIds: string[]) => Promise<void>;
 
   // Class & Promotion
   promoteStudents: (
@@ -111,6 +113,7 @@ interface DatabaseContextType {
 
   // Attendance
   saveAttendanceBatch: (records: Omit<AttendanceRecord, 'attendance_id' | 'recorded_at'>[]) => Promise<void>;
+  saveDailyAttendance: (records: Omit<AttendanceRecord, 'attendance_id' | 'recorded_at'>[]) => Promise<void>;
 
   // Violations & Guidance
   addViolation: (violation: Omit<ViolationRecord, 'violation_id' | 'created_at' | 'updated_at'>) => Promise<ViolationRecord>;
@@ -140,6 +143,8 @@ interface DatabaseContextType {
   // Parent Comms
   addParentComm: (comm: Omit<ParentCommunication, 'comm_id' | 'created_at'>) => Promise<ParentCommunication>;
   deleteParentComm: (commId: string) => Promise<void>;
+  addParentCommunication: (comm: Omit<ParentCommunication, 'comm_id' | 'created_at'>) => Promise<ParentCommunication>;
+  deleteParentCommunication: (commId: string) => Promise<void>;
 
   // Settings & DB Management
   updateSettings: (settings: Partial<SchoolSettings>) => Promise<void>;
@@ -580,76 +585,87 @@ export const DatabaseProvider: React.FC<{ children: ReactNode }> = ({ children }
     }
   }, [db, showToast]);
 
-  const deleteStudent = useCallback(async (studentId: string) => {
-    // Collect related documents to delete from Firestore
-    const ops: { type: 'delete'; collection: string; docId: string }[] = [
-      { type: 'delete', collection: COLLECTIONS.STUDENTS, docId: studentId }
-    ];
+  const deleteMultipleStudents = useCallback(async (studentIds: string[]) => {
+    if (!studentIds.length) return;
+    const targetSet = new Set(studentIds);
 
-    db.addresses.filter(a => a.student_id === studentId).forEach(a => {
+    // Collect related documents to delete from Firestore
+    const ops: { type: 'delete'; collection: string; docId: string }[] = [];
+    studentIds.forEach(id => {
+      ops.push({ type: 'delete', collection: COLLECTIONS.STUDENTS, docId: id });
+    });
+
+    db.addresses.filter(a => targetSet.has(a.student_id)).forEach(a => {
       ops.push({ type: 'delete', collection: COLLECTIONS.ADDRESSES, docId: a.address_id });
     });
-    db.parents.filter(p => p.student_id === studentId).forEach(p => {
+    db.parents.filter(p => targetSet.has(p.student_id)).forEach(p => {
       ops.push({ type: 'delete', collection: COLLECTIONS.PARENTS, docId: p.parent_id });
     });
-    db.student_class_history.filter(h => h.student_id === studentId).forEach(h => {
+    db.student_class_history.filter(h => targetSet.has(h.student_id)).forEach(h => {
       ops.push({ type: 'delete', collection: COLLECTIONS.STUDENT_CLASS_HISTORY, docId: h.history_id });
     });
-    db.attendance.filter(att => att.student_id === studentId).forEach(att => {
+    db.attendance.filter(att => targetSet.has(att.student_id)).forEach(att => {
       ops.push({ type: 'delete', collection: COLLECTIONS.ATTENDANCE, docId: att.attendance_id });
     });
-    db.violations.filter(v => v.student_id === studentId).forEach(v => {
+    db.violations.filter(v => targetSet.has(v.student_id)).forEach(v => {
       ops.push({ type: 'delete', collection: COLLECTIONS.VIOLATIONS, docId: v.violation_id });
     });
-    db.guidance.filter(g => g.student_id === studentId).forEach(g => {
+    db.guidance.filter(g => targetSet.has(g.student_id)).forEach(g => {
       ops.push({ type: 'delete', collection: COLLECTIONS.GUIDANCE, docId: g.guidance_id });
     });
-    db.home_visits.filter(hv => hv.student_id === studentId).forEach(hv => {
+    db.home_visits.filter(hv => targetSet.has(hv.student_id)).forEach(hv => {
       ops.push({ type: 'delete', collection: COLLECTIONS.HOME_VISITS, docId: hv.visit_id });
     });
-    db.student_notes.filter(n => n.student_id === studentId).forEach(n => {
+    db.student_notes.filter(n => targetSet.has(n.student_id)).forEach(n => {
       ops.push({ type: 'delete', collection: COLLECTIONS.STUDENT_NOTES, docId: n.note_id });
     });
-    db.achievements.filter(ach => ach.student_id === studentId).forEach(ach => {
+    db.achievements.filter(ach => targetSet.has(ach.student_id)).forEach(ach => {
       ops.push({ type: 'delete', collection: COLLECTIONS.ACHIEVEMENTS, docId: ach.achievement_id });
     });
-    db.potentials.filter(pot => pot.student_id === studentId).forEach(pot => {
+    db.potentials.filter(pot => targetSet.has(pot.student_id)).forEach(pot => {
       ops.push({ type: 'delete', collection: COLLECTIONS.POTENTIALS, docId: pot.potential_id });
     });
-    db.parent_communications.filter(c => c.student_id === studentId).forEach(c => {
+    db.parent_communications.filter(c => targetSet.has(c.student_id)).forEach(c => {
       ops.push({ type: 'delete', collection: COLLECTIONS.PARENT_COMMUNICATIONS, docId: c.comm_id });
     });
-    db.evaluations?.filter(e => e.student_id === studentId).forEach(e => {
+    db.evaluations?.filter(e => targetSet.has(e.student_id)).forEach(e => {
       ops.push({ type: 'delete', collection: COLLECTIONS.EVALUATIONS, docId: e.evaluation_id });
     });
 
     const updatedDb: AppDatabase = {
       ...db,
-      students: db.students.filter(s => s.student_id !== studentId),
-      addresses: db.addresses.filter(a => a.student_id !== studentId),
-      parents: db.parents.filter(p => p.student_id !== studentId),
-      student_class_history: db.student_class_history.filter(h => h.student_id !== studentId),
-      attendance: db.attendance.filter(att => att.student_id !== studentId),
-      violations: db.violations.filter(v => v.student_id !== studentId),
-      guidance: db.guidance.filter(g => g.student_id !== studentId),
-      home_visits: db.home_visits.filter(hv => hv.student_id !== studentId),
-      student_notes: db.student_notes.filter(n => n.student_id !== studentId),
-      achievements: db.achievements.filter(ach => ach.student_id !== studentId),
-      potentials: db.potentials.filter(pot => pot.student_id !== studentId),
-      parent_communications: db.parent_communications.filter(c => c.student_id !== studentId),
-      evaluations: db.evaluations?.filter(e => e.student_id !== studentId) || [],
+      students: db.students.filter(s => !targetSet.has(s.student_id)),
+      addresses: db.addresses.filter(a => !targetSet.has(a.student_id)),
+      parents: db.parents.filter(p => !targetSet.has(p.student_id)),
+      student_class_history: db.student_class_history.filter(h => !targetSet.has(h.student_id)),
+      attendance: db.attendance.filter(att => !targetSet.has(att.student_id)),
+      violations: db.violations.filter(v => !targetSet.has(v.student_id)),
+      guidance: db.guidance.filter(g => !targetSet.has(g.student_id)),
+      home_visits: db.home_visits.filter(hv => !targetSet.has(hv.student_id)),
+      student_notes: db.student_notes.filter(n => !targetSet.has(n.student_id)),
+      achievements: db.achievements.filter(ach => !targetSet.has(ach.student_id)),
+      potentials: db.potentials.filter(pot => !targetSet.has(pot.student_id)),
+      parent_communications: db.parent_communications.filter(c => !targetSet.has(c.student_id)),
+      evaluations: db.evaluations?.filter(e => !targetSet.has(e.student_id)) || [],
     };
     setDb(updatedDb);
     saveLocalCache(updatedDb);
 
-    try {
-      showToast('loading', 'Menghapus data siswa dari Firestore...');
-      await batchWriteFirestore(ops);
-      showToast('success', 'Data siswa berhasil dihapus dari cloud.');
-    } catch (err: any) {
-      showToast('error', `Gagal menghapus dari Firestore: ${err.message}`);
+    if (isAuthenticated && auth.currentUser) {
+      try {
+        await batchWriteFirestore(ops);
+        showToast('success', `${studentIds.length} data siswa berhasil dihapus dari cloud.`);
+      } catch (err: any) {
+        showToast('error', `Gagal menghapus dari Firestore: ${err.message}`);
+      }
+    } else {
+      showToast('success', `${studentIds.length} data siswa berhasil dihapus.`);
     }
-  }, [db, showToast]);
+  }, [db, isAuthenticated, showToast]);
+
+  const deleteStudent = useCallback(async (studentId: string) => {
+    return deleteMultipleStudents([studentId]);
+  }, [deleteMultipleStudents]);
 
   // Class Promotion & Lifecycle
   const promoteStudents = useCallback(async (
@@ -799,7 +815,8 @@ export const DatabaseProvider: React.FC<{ children: ReactNode }> = ({ children }
     const newAttendanceList = [...db.attendance];
     const ops: { type: 'set'; collection: string; docId: string; data: any }[] = [];
 
-    for (const rec of records) {
+    for (let idx = 0; idx < records.length; idx++) {
+      const rec = records[idx];
       const existingIdx = newAttendanceList.findIndex(
         a => a.student_id === rec.student_id && a.date === rec.date
       );
@@ -820,7 +837,7 @@ export const DatabaseProvider: React.FC<{ children: ReactNode }> = ({ children }
       } else {
         const newRec: AttendanceRecord = {
           ...rec,
-          attendance_id: `att-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+          attendance_id: `att-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 5)}`,
           recorded_at: now,
         };
         newAttendanceList.push(newRec);
@@ -840,14 +857,15 @@ export const DatabaseProvider: React.FC<{ children: ReactNode }> = ({ children }
     setDb(updatedDb);
     saveLocalCache(updatedDb);
 
-    try {
-      showToast('loading', `Menyimpan presensi ${records.length} siswa ke Firestore...`);
-      await batchWriteFirestore(ops);
-      showToast('success', `Presensi ${records.length} siswa tersimpan di Firestore.`);
-    } catch (err: any) {
-      showToast('error', `Gagal menyimpan presensi ke Firestore: ${err.message}`);
+    if (isAuthenticated && auth.currentUser) {
+      try {
+        await batchWriteFirestore(ops);
+      } catch (err: any) {
+        console.error('[ATTENDANCE FIRESTORE SAVE ERROR]:', err);
+        throw err;
+      }
     }
-  }, [db, showToast]);
+  }, [db, isAuthenticated]);
 
   // Violations & Guidance
   const addViolation = useCallback(async (violation: Omit<ViolationRecord, 'violation_id' | 'created_at' | 'updated_at'>): Promise<ViolationRecord> => {
@@ -1609,6 +1627,7 @@ export const DatabaseProvider: React.FC<{ children: ReactNode }> = ({ children }
         lastSyncTime,
         syncErrorMessage,
         toast,
+        showToast,
         clearToast,
         loginGoogleUser,
         logoutUser,
@@ -1620,10 +1639,12 @@ export const DatabaseProvider: React.FC<{ children: ReactNode }> = ({ children }
         addStudent,
         updateStudent,
         deleteStudent,
+        deleteMultipleStudents,
         promoteStudents,
         addClass,
         addAcademicYear,
         saveAttendanceBatch,
+        saveDailyAttendance: saveAttendanceBatch,
         addViolation,
         updateViolation,
         deleteViolation,
@@ -1641,6 +1662,8 @@ export const DatabaseProvider: React.FC<{ children: ReactNode }> = ({ children }
         saveEvaluation,
         addParentComm,
         deleteParentComm,
+        addParentCommunication: addParentComm,
+        deleteParentCommunication: deleteParentComm,
         updateSettings,
         batchImportStudents,
         replaceAllStudentsWithImport,

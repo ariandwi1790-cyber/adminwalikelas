@@ -23,6 +23,7 @@ import {
   User
 } from 'lucide-react';
 import { exportFullWorkbook } from '../../utils/excel';
+import { ConfirmModal } from '../common/ConfirmModal';
 
 interface StudentListProps {
   onSelectStudent: (studentId: string) => void;
@@ -39,7 +40,7 @@ export const StudentList: React.FC<StudentListProps> = ({
   onOpenPromotionModal,
   onOpenImport,
 }) => {
-  const { db, allStudentsFullData, deleteStudent, activeClass, activeAcademicYear } = useDatabase();
+  const { db, allStudentsFullData, deleteStudent, deleteMultipleStudents, activeClass, activeAcademicYear } = useDatabase();
   
   const [searchTerm, setSearchTerm] = useState('');
   const [filterGender, setFilterGender] = useState<string>('all');
@@ -47,6 +48,9 @@ export const StudentList: React.FC<StudentListProps> = ({
   const [filterWarning, setFilterWarning] = useState<string>('all');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
+  
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string; isBatch?: boolean } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Filter logic
   const filteredStudents = useMemo(() => {
@@ -86,8 +90,27 @@ export const StudentList: React.FC<StudentListProps> = ({
   };
 
   const handleDeleteConfirm = (studentId: string, name: string) => {
-    if (window.confirm(`PERINGATAN INTEGRITAS: Anda yakin ingin menghapus data siswa "${name}" (${studentId}) beserta seluruh riwayat presensi, pelanggaran, dan home visit? Tindakan ini tidak dapat dibatalkan.`)) {
-      deleteStudent(studentId);
+    setDeleteTarget({ id: studentId, name, isBatch: false });
+  };
+
+  const handleBatchDeleteConfirm = () => {
+    setDeleteTarget({ id: 'batch', name: `${selectedIds.length} siswa terpilih`, isBatch: true });
+  };
+
+  const executeDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      if (deleteTarget.isBatch) {
+        await deleteMultipleStudents(selectedIds);
+        setSelectedIds([]);
+      } else {
+        await deleteStudent(deleteTarget.id);
+        setSelectedIds(prev => prev.filter(id => id !== deleteTarget.id));
+      }
+    } finally {
+      setIsDeleting(false);
+      setDeleteTarget(null);
     }
   };
 
@@ -107,14 +130,25 @@ export const StudentList: React.FC<StudentListProps> = ({
 
         <div className="flex flex-wrap items-center gap-2">
           {selectedIds.length > 0 && (
-            <button
-              id="btn-mass-promotion"
-              onClick={() => onOpenPromotionModal(selectedIds)}
-              className="bg-purple-600 hover:bg-purple-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs cursor-pointer min-h-[38px]"
-            >
-              <GraduationCap className="w-4 h-4" />
-              <span>Naik Kelas ({selectedIds.length})</span>
-            </button>
+            <>
+              <button
+                id="btn-mass-promotion"
+                onClick={() => onOpenPromotionModal(selectedIds)}
+                className="bg-purple-600 hover:bg-purple-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs cursor-pointer min-h-[38px]"
+              >
+                <GraduationCap className="w-4 h-4" />
+                <span>Naik Kelas ({selectedIds.length})</span>
+              </button>
+
+              <button
+                id="btn-mass-delete"
+                onClick={handleBatchDeleteConfirm}
+                className="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs cursor-pointer min-h-[38px]"
+              >
+                <Trash2 className="w-4 h-4 text-red-600" />
+                <span>Hapus ({selectedIds.length})</span>
+              </button>
+            </>
           )}
 
           {onOpenImport && (
@@ -492,6 +526,23 @@ export const StudentList: React.FC<StudentListProps> = ({
           </table>
         </div>
       </div>
+
+      {/* Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!deleteTarget}
+        title={deleteTarget?.isBatch ? 'Konfirmasi Hapus Massal Siswa' : 'Konfirmasi Hapus Data Siswa'}
+        message={
+          deleteTarget?.isBatch
+            ? `PERINGATAN: Anda akan menghapus ${deleteTarget?.name} beserta seluruh riwayat presensi, pelanggaran, catatan, prestasi, dan home visit terkait. Tindakan ini tidak dapat dibatalkan.`
+            : `PERINGATAN: Anda yakin ingin menghapus data siswa "${deleteTarget?.name}" (${deleteTarget?.id}) beserta seluruh riwayat presensi, pelanggaran, catatan, prestasi, dan home visit? Tindakan ini tidak dapat dibatalkan.`
+        }
+        confirmText={deleteTarget?.isBatch ? 'Hapus Siswa Terpilih' : 'Ya, Hapus Siswa'}
+        cancelText="Batal"
+        type="danger"
+        isProcessing={isDeleting}
+        onConfirm={executeDelete}
+        onClose={() => !isDeleting && setDeleteTarget(null)}
+      />
     </div>
   );
 };

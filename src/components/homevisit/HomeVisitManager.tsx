@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useDatabase } from '../../context/DatabaseContext';
 import { HomeVisitRecord } from '../../types';
 import { Home, Plus, MapPin, Users, Calendar, CheckCircle2, Trash2, X, Save, FileText } from 'lucide-react';
+import { ConfirmModal } from '../common/ConfirmModal';
 
 export const HomeVisitManager: React.FC = () => {
   const { db, addHomeVisit, deleteHomeVisit, allStudentsFullData, activeClass, activeAcademicYear } = useDatabase();
@@ -16,6 +17,9 @@ export const HomeVisitManager: React.FC = () => {
   const [agreement, setAgreement] = useState('');
   const [followUp, setFollowUp] = useState('');
   const [documentation, setDocumentation] = useState('');
+
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const handleOpenAdd = (presetStudentId?: string) => {
     const sid = presetStudentId || allStudentsFullData[0]?.student.student_id || '';
@@ -127,12 +131,12 @@ export const HomeVisitManager: React.FC = () => {
                   </div>
 
                   <button
-                    onClick={() => {
-                      if (window.confirm('Hapus dokumen home visit ini?')) {
-                        deleteHomeVisit(hv.visit_id);
-                      }
-                    }}
+                    onClick={() => setDeleteTarget({
+                      id: hv.visit_id,
+                      name: `Home Visit siswa ${student?.full_name || hv.student_id} (${hv.date})`
+                    })}
                     className="text-slate-400 hover:text-rose-600 p-1 self-end sm:self-auto cursor-pointer"
+                    title="Hapus Home Visit"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -285,6 +289,28 @@ export const HomeVisitManager: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!deleteTarget}
+        title="Konfirmasi Hapus Home Visit"
+        message={`Apakah Anda yakin ingin menghapus catatan ${deleteTarget?.name}? Dokumen ini akan dihapus permanen.`}
+        confirmText="Ya, Hapus"
+        cancelText="Batal"
+        type="danger"
+        isProcessing={isDeleting}
+        onConfirm={async () => {
+          if (!deleteTarget) return;
+          setIsDeleting(true);
+          try {
+            await deleteHomeVisit(deleteTarget.id);
+          } finally {
+            setIsDeleting(false);
+            setDeleteTarget(null);
+          }
+        }}
+        onClose={() => !isDeleting && setDeleteTarget(null)}
+      />
     </div>
   );
 };

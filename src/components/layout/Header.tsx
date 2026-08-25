@@ -6,17 +6,18 @@ import {
   Users, 
   Download, 
   Upload, 
-  Menu,
-  Cloud,
-  CloudOff,
-  RefreshCw,
-  LogIn,
-  LogOut,
-  User as UserIcon,
-  CheckCircle2,
-  Database
+  Menu, 
+  Cloud, 
+  CloudOff, 
+  RefreshCw, 
+  LogIn, 
+  LogOut, 
+  User as UserIcon, 
+  CheckCircle2, 
+  Database 
 } from 'lucide-react';
 import { exportDatabaseBackup } from '../../db/storage';
+import { ConfirmModal } from '../common/ConfirmModal';
 
 interface HeaderProps {
   onOpenBackupModal?: () => void;
@@ -52,6 +53,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [isMigrating, setIsMigrating] = useState(false);
+  const [showMigrateModal, setShowMigrateModal] = useState(false);
 
   const handleQuickBackup = () => {
     const jsonStr = exportDatabaseBackup();
@@ -64,11 +66,17 @@ export const Header: React.FC<HeaderProps> = ({
     URL.revokeObjectURL(url);
   };
 
-  const handleMigrate = async () => {
-    if (window.confirm(`Unggah ${localDataCount} data siswa lokal ke Cloud Firestore sekarang?`)) {
-      setIsMigrating(true);
+  const handleMigrate = () => {
+    setShowMigrateModal(true);
+  };
+
+  const executeMigrate = async () => {
+    setIsMigrating(true);
+    try {
       await migrateLocalDataToFirestore();
+    } finally {
       setIsMigrating(false);
+      setShowMigrateModal(false);
     }
   };
 
@@ -270,6 +278,19 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Migration Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showMigrateModal}
+        title="Unggah Data Lokal ke Cloud Firestore"
+        message={`Ditemukan ${localDataCount} data siswa lokal. Apakah Anda ingin mengunggah dan menyinkronkan seluruh data ini ke Cloud Firestore sekarang?`}
+        confirmText="Unggah ke Firestore"
+        cancelText="Batal"
+        type="info"
+        isProcessing={isMigrating}
+        onConfirm={executeMigrate}
+        onClose={() => !isMigrating && setShowMigrateModal(false)}
+      />
     </header>
   );
 };

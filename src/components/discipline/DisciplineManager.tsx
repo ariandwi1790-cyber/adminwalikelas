@@ -17,9 +17,10 @@ import {
   Save,
   ArrowRight
 } from 'lucide-react';
+import { ConfirmModal } from '../common/ConfirmModal';
 
 export const DisciplineManager: React.FC = () => {
-  const { db, addViolation, addGuidance, deleteViolation, allStudentsFullData, activeClass, activeAcademicYear } = useDatabase();
+  const { db, addViolation, addGuidance, deleteViolation, deleteGuidance, allStudentsFullData, activeClass, activeAcademicYear } = useDatabase();
 
   const [activeTab, setActiveTab] = useState<'violations' | 'guidance' | 'matrix'>('violations');
 
@@ -33,6 +34,10 @@ export const DisciplineManager: React.FC = () => {
   const [violationChronology, setViolationChronology] = useState('');
   const [violationAction, setViolationAction] = useState('');
   const [violationEvidence, setViolationEvidence] = useState('');
+
+  // Delete modal state
+  const [deleteItem, setDeleteItem] = useState<{ id: string; type: 'violation' | 'guidance'; title: string } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Add Guidance Modal State
   const [showAddGuidanceModal, setShowAddGuidanceModal] = useState(false);
@@ -200,12 +205,13 @@ export const DisciplineManager: React.FC = () => {
                       </div>
 
                       <button
-                        onClick={() => {
-                          if (window.confirm('Hapus catatan pelanggaran ini?')) {
-                            deleteViolation(v.violation_id);
-                          }
-                        }}
+                        onClick={() => setDeleteItem({
+                          id: v.violation_id,
+                          type: 'violation',
+                          title: `Pelanggaran "${v.violation_type}" (${student?.full_name || v.student_id})`
+                        })}
                         className="text-slate-400 hover:text-rose-600 p-1 cursor-pointer"
+                        title="Hapus Pelanggaran"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -267,7 +273,20 @@ export const DisciplineManager: React.FC = () => {
                         {g.stage}
                       </span>
                     </div>
-                    <span className="text-xs text-slate-400">{g.date} • Oleh {g.counselor_name}</span>
+                    <div className="flex items-center space-x-3">
+                      <span className="text-xs text-slate-400">{g.date} • Oleh {g.counselor_name}</span>
+                      <button
+                        onClick={() => setDeleteItem({
+                          id: g.guidance_id,
+                          type: 'guidance',
+                          title: `Catatan ${g.stage} (${student?.full_name || g.student_id})`
+                        })}
+                        className="text-slate-400 hover:text-rose-600 p-1 cursor-pointer"
+                        title="Hapus Pembinaan"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
@@ -583,6 +602,32 @@ export const DisciplineManager: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!deleteItem}
+        title={`Konfirmasi Hapus ${deleteItem?.type === 'violation' ? 'Pelanggaran' : 'Pembinaan'}`}
+        message={`Apakah Anda yakin ingin menghapus catatan ${deleteItem?.title}? Tindakan ini akan menghapus data dari sistem dan cloud Firestore.`}
+        confirmText="Ya, Hapus"
+        cancelText="Batal"
+        type="danger"
+        isProcessing={isDeleting}
+        onConfirm={async () => {
+          if (!deleteItem) return;
+          setIsDeleting(true);
+          try {
+            if (deleteItem.type === 'violation') {
+              await deleteViolation(deleteItem.id);
+            } else {
+              await deleteGuidance(deleteItem.id);
+            }
+          } finally {
+            setIsDeleting(false);
+            setDeleteItem(null);
+          }
+        }}
+        onClose={() => !isDeleting && setDeleteItem(null)}
+      />
     </div>
   );
 };

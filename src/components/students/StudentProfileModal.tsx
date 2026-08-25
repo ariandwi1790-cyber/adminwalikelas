@@ -42,7 +42,7 @@ type ProfileTab =
   | 'history';
 
 export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({ studentId, onClose }) => {
-  const { db, getStudentById } = useDatabase();
+  const { db, getStudentById, showToast } = useDatabase();
   const [activeTab, setActiveTab] = useState<ProfileTab>('overview');
 
   const data = getStudentById(studentId);
@@ -59,7 +59,13 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({ studen
   const studentComms = db.parent_communications.filter(c => c.student_id === studentId);
 
   const handlePrintPDF = () => {
-    generateStudentReportPDF(data, db.school_settings, db);
+    try {
+      generateStudentReportPDF(data, db.school_settings, db);
+      showToast('success', `PDF Rapor ${student.full_name} berhasil dibuat.`);
+    } catch (err: any) {
+      console.error('PDF generation failed:', err);
+      showToast('error', 'Gagal membuat PDF rapor siswa. Silakan periksa data laporan.');
+    }
   };
 
   return (

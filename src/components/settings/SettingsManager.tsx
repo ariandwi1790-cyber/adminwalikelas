@@ -19,6 +19,7 @@ import {
   Server
 } from 'lucide-react';
 import { exportDatabaseBackup } from '../../db/storage';
+import { ConfirmModal } from '../common/ConfirmModal';
 
 export const SettingsManager: React.FC = () => {
   const { 
@@ -61,6 +62,10 @@ export const SettingsManager: React.FC = () => {
   const [isRestoring, setIsRestoring] = useState(false);
   const [restoreFeedback, setRestoreFeedback] = useState<string | null>(null);
 
+  // Confirm Modal State
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSaveSchoolSettings = async (e: React.FormEvent) => {
@@ -70,12 +75,6 @@ export const SettingsManager: React.FC = () => {
 
   const handleSaveWeights = async (e: React.FormEvent) => {
     e.preventDefault();
-    const sum = weights.attendance_weight + weights.punctuality_weight + weights.violation_weight + weights.compliance_weight + weights.responsibility_weight;
-    if (sum !== 100) {
-      if (!window.confirm(`Total bobot saat ini ${sum}%. Disarankan total 100%. Tetap simpan?`)) {
-        return;
-      }
-    }
     await updateSettings({
       discipline_weights: weights,
       early_warning_thresholds: thresholds,
@@ -140,9 +139,17 @@ export const SettingsManager: React.FC = () => {
     reader.readAsText(file);
   };
 
-  const handleResetToSeed = async () => {
-    if (window.confirm('PERINGATAN: Seluruh data saat ini akan direset dan digantikan dengan data percontohan SMK Indonesia yang ditulis ke Cloud Firestore. Lanjutkan?')) {
+  const handleResetToSeed = () => {
+    setShowResetModal(true);
+  };
+
+  const executeReset = async () => {
+    setIsResetting(true);
+    try {
       await resetDatabase();
+    } finally {
+      setIsResetting(false);
+      setShowResetModal(false);
     }
   };
 
@@ -714,6 +721,19 @@ export const SettingsManager: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Reset Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showResetModal}
+        title="Reset ke Data Contoh Percontohan"
+        message="PERINGATAN: Seluruh data saat ini akan direset dan digantikan dengan data percontohan SMK Indonesia yang ditulis ke Cloud Firestore. Tindakan ini tidak dapat dibatalkan."
+        confirmText="Ya, Reset Database"
+        cancelText="Batal"
+        type="danger"
+        isProcessing={isResetting}
+        onConfirm={executeReset}
+        onClose={() => !isResetting && setShowResetModal(false)}
+      />
     </div>
   );
 };

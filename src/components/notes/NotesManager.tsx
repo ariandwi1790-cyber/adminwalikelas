@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useDatabase } from '../../context/DatabaseContext';
 import { StickyNote, Plus, Trash2, X, Filter, Tag, Calendar, User } from 'lucide-react';
+import { ConfirmModal } from '../common/ConfirmModal';
 
 export const NotesManager: React.FC = () => {
   const { db, addStudentNote, deleteStudentNote, allStudentsFullData } = useDatabase();
@@ -12,6 +13,9 @@ export const NotesManager: React.FC = () => {
   const [category, setCategory] = useState<'Akademik' | 'Perilaku' | 'Sosial' | 'Keluarga' | 'Lainnya'>('Perilaku');
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
+
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const filteredNotes = db.student_notes.filter(n => {
     return filterCategory === 'all' || n.category === filterCategory;
@@ -102,12 +106,12 @@ export const NotesManager: React.FC = () => {
                     </h3>
                   </div>
                   <button
-                    onClick={() => {
-                      if (window.confirm('Hapus catatan ini?')) {
-                        deleteStudentNote(n.note_id);
-                      }
-                    }}
+                    onClick={() => setDeleteTarget({
+                      id: n.note_id,
+                      name: `Catatan "${n.title}" (${s?.full_name || n.student_id})`
+                    })}
                     className="text-slate-400 hover:text-rose-600 p-1 cursor-pointer"
+                    title="Hapus Catatan"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -226,6 +230,28 @@ export const NotesManager: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!deleteTarget}
+        title="Konfirmasi Hapus Catatan"
+        message={`Apakah Anda yakin ingin menghapus catatan ${deleteTarget?.name}? Data yang dihapus tidak dapat dipulihkan.`}
+        confirmText="Ya, Hapus"
+        cancelText="Batal"
+        type="danger"
+        isProcessing={isDeleting}
+        onConfirm={async () => {
+          if (!deleteTarget) return;
+          setIsDeleting(true);
+          try {
+            await deleteStudentNote(deleteTarget.id);
+          } finally {
+            setIsDeleting(false);
+            setDeleteTarget(null);
+          }
+        }}
+        onClose={() => !isDeleting && setDeleteTarget(null)}
+      />
     </div>
   );
 };

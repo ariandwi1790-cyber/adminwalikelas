@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useDatabase } from '../../context/DatabaseContext';
 import { ParentCommunicationRecord } from '../../types';
 import { MessageSquareQuote, Plus, Phone, MessageCircle, Mail, Users, Trash2, X, Save } from 'lucide-react';
+import { ConfirmModal } from '../common/ConfirmModal';
 
 export const ParentCommManager: React.FC = () => {
   const { db, addParentCommunication, deleteParentCommunication, allStudentsFullData } = useDatabase();
@@ -14,6 +15,9 @@ export const ParentCommManager: React.FC = () => {
   const [topic, setTopic] = useState('');
   const [result, setResult] = useState('');
   const [followUp, setFollowUp] = useState('');
+
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const handleStudentSelect = (sid: string) => {
     setStudentId(sid);
@@ -113,12 +117,12 @@ export const ParentCommManager: React.FC = () => {
                   </div>
 
                   <button
-                    onClick={() => {
-                      if (window.confirm('Hapus log komunikasi ini?')) {
-                        deleteParentCommunication(c.comm_id);
-                      }
-                    }}
+                    onClick={() => setDeleteTarget({
+                      id: c.comm_id,
+                      name: `Komunikasi ${c.media} (${s?.full_name || c.student_id} - ${c.parent_name})`
+                    })}
                     className="text-slate-400 hover:text-rose-600 p-1 cursor-pointer"
+                    title="Hapus Log Komunikasi"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -265,6 +269,28 @@ export const ParentCommManager: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!deleteTarget}
+        title="Konfirmasi Hapus Log Komunikasi"
+        message={`Apakah Anda yakin ingin menghapus catatan ${deleteTarget?.name}? Data yang dihapus tidak dapat dipulihkan.`}
+        confirmText="Ya, Hapus"
+        cancelText="Batal"
+        type="danger"
+        isProcessing={isDeleting}
+        onConfirm={async () => {
+          if (!deleteTarget) return;
+          setIsDeleting(true);
+          try {
+            await deleteParentCommunication(deleteTarget.id);
+          } finally {
+            setIsDeleting(false);
+            setDeleteTarget(null);
+          }
+        }}
+        onClose={() => !isDeleting && setDeleteTarget(null)}
+      />
     </div>
   );
 };

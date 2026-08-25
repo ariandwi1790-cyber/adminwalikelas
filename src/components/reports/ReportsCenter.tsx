@@ -15,39 +15,63 @@ import { generateStudentReportPDF, generateClassRecapPDF } from '../../utils/pdf
 import { exportFullWorkbook, exportClassRecapExcel } from '../../utils/excel';
 
 export const ReportsCenter: React.FC = () => {
-  const { db, allStudentsFullData, activeClass, activeAcademicYear } = useDatabase();
+  const { db, allStudentsFullData, activeClass, activeAcademicYear, showToast } = useDatabase();
 
   const [selectedStudentId, setSelectedStudentId] = useState(allStudentsFullData[0]?.student.student_id || '');
 
   const handlePrintIndividualPDF = () => {
     const studentData = allStudentsFullData.find(s => s.student.student_id === selectedStudentId);
     if (!studentData) {
-      alert('Pilih siswa terlebih dahulu.');
+      showToast('error', 'Pilih siswa terlebih dahulu.');
       return;
     }
-    generateStudentReportPDF(studentData, db.school_settings, db);
+    try {
+      generateStudentReportPDF(studentData, db.school_settings, db);
+      showToast('success', `PDF Rapor ${studentData.student.full_name} berhasil dibuat.`);
+    } catch (err: any) {
+      console.error('PDF generation failed:', err);
+      showToast('error', 'Gagal membuat PDF rapor siswa. Silakan periksa data laporan.');
+    }
   };
 
   const handlePrintClassPDF = () => {
-    generateClassRecapPDF(
-      allStudentsFullData,
-      activeClass?.class_name || 'XI TKR B',
-      activeAcademicYear?.year_name || '2026/2027',
-      db.school_settings
-    );
+    try {
+      generateClassRecapPDF(
+        allStudentsFullData,
+        activeClass?.class_name || 'XI TKR B',
+        activeAcademicYear?.year_name || '2026/2027',
+        db.school_settings
+      );
+      showToast('success', `PDF Rekap Kelas ${activeClass?.class_name || ''} berhasil dibuat.`);
+    } catch (err: any) {
+      console.error('PDF generation failed:', err);
+      showToast('error', 'Gagal membuat PDF rekap kelas. Silakan periksa data.');
+    }
   };
 
   const handleExportFullExcel = () => {
-    exportFullWorkbook(db);
+    try {
+      exportFullWorkbook(db);
+      showToast('success', 'Master Database Workbook Excel berhasil diunduh.');
+    } catch (err: any) {
+      console.error('Excel export failed:', err);
+      showToast('error', `Gagal mengekspor Excel: ${err.message}`);
+    }
   };
 
   const handleExportClassRecapExcel = () => {
-    exportClassRecapExcel(
-      allStudentsFullData,
-      activeClass?.class_name || 'XI TKR B',
-      activeAcademicYear?.year_name || '2026/2027',
-      db.school_settings
-    );
+    try {
+      exportClassRecapExcel(
+        allStudentsFullData,
+        activeClass?.class_name || 'XI TKR B',
+        activeAcademicYear?.year_name || '2026/2027',
+        db.school_settings
+      );
+      showToast('success', `Excel Rekap Kelas ${activeClass?.class_name || ''} berhasil diunduh.`);
+    } catch (err: any) {
+      console.error('Excel export failed:', err);
+      showToast('error', `Gagal mengekspor Excel: ${err.message}`);
+    }
   };
 
   return (
